@@ -1,0 +1,61 @@
+#!/bin/bash
+#
+# find . -path './var/lib/vps-lxc/dom/*' -prune -o \
+#        -path './var/lib/vps-lxc/tpl/*' -prune -o \
+#        -path './dev/vps-lxc/*' -prune -o \
+#        -path './.git' -prune -o \
+#        -type d -print
+
+{
+cat <<EOF
+.
+./dev
+./dev/vps-lxc
+./etc
+./etc/vps-lxc
+./etc/vps-lxc/conf
+./etc/vps-lxc/conf/dnsmasq
+./etc/vps-lxc/cron
+./etc/profile.d
+./etc/bash_completion.d
+./usr
+./usr/bin
+./usr/lib
+./usr/lib/vps-lxc
+./usr/lib/vps-lxc/static
+./usr/lib/vps-lxc/shared
+./usr/lib/vps-lxc/cmd
+./usr/lib/vps-lxc/include
+./usr/lib/vps-lxc/include/mktpl
+./usr/lib/vps-lxc/include/mktpl/archlinux
+./usr/lib/vps-lxc/include/mktpl/archlinux/default
+./usr/lib/vps-lxc/include/mktpl/archlinux/archlinux
+./usr/lib/vps-lxc/include/mktpl/archlinux/archlinux/shared
+./usr/lib/vps-lxc/include/mktpl/archlinux/archlinux/static
+./usr/lib/vps-lxc/include/mktpl/ubuntu
+./usr/lib/vps-lxc/include/mktpl/ubuntu/default
+./usr/lib/vps-lxc/include/mkdom
+./usr/lib/vps-lxc/include/mkdom/default
+./usr/share
+./usr/share/doc
+./usr/share/doc/vps-lxc
+./var
+./var/lib
+./var/lib/vps-lxc
+./var/lib/vps-lxc/dom
+./var/lib/vps-lxc/tpl
+./var/lib/vps-lxc/def
+./var/lib/vps-lxc/def/exec
+./var/lib/vps-lxc/def/exec/proc
+./var/lib/vps-lxc/def/exec/sys
+./var/lib/vps-lxc/def/mnt
+./var/log
+./var/log/vps-lxc
+./var/log/vps-lxc/dom
+./var/log/vps-lxc/tpl
+./var/log/vps-lxc/cmd
+./var/run
+./var/run/vps-lxc
+EOF
+} |
+sed -e "s,^\.,$(dirname ${0}),g" | xargs mkdir -p

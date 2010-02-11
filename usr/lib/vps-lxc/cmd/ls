@@ -1,0 +1,78 @@
+#!/bin/bash
+#
+# COMMAND ls
+
+# COMMAND init
+vps_cmd_init () {
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_LS_TARGET:=}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} <dom|tpl>
+List each domains and/or templates and their status
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    case "${opt}" in
+    *)
+        vps_exception ${LINENO} fatal "options not accepted" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local target=false
+    [ "${1}" = "dom" ] && target=true
+    [ "${1}" = "tpl" ] && target=true
+    ${target} || vps_exception ${LINENO} fatal "TARGET invalid, choose dom or tpl" ${FUNCNAME}
+    VPS_LS_TARGET="${1}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    vps_exception ${LINENO} fatal "COMMAND not implemented" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    return 0
+
+}

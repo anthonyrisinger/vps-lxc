@@ -1,0 +1,52 @@
+#!/bin/bash
+
+vps_init () {
+
+    # set debug
+    : ${VPS_DEBUG:=false}
+    { echo "${VPS_DEBUG}" | grep -q "^\(true\|false\)\$"; } || VPS_DEBUG=false
+
+    # set btrfs/cp/(lvm)?
+    local method_avail="btrfs cp"
+    VPS_HAS_BTRFS=false
+    VPS_HAS_CP=false
+    [ "$(type -t btrfsctl)" = "file" ] && VPS_HAS_BTRFS=true
+    [ "$(type -t cp)" = "file" ] && VPS_HAS_CP=true
+    # if already defined, check it's a good value
+    if [ -n "${VPS_USE_FS_METHOD}" ]; then
+        echo "${method_avail}" | tr " " "\n" | grep -q "^${VPS_USE_FS_METHOD}\$" || \
+            vps_exception ${LINENO} fatal "${VPS_USE_FS_METHOD} is not a valid fs method type" ${FUNCNAME}
+        ! ${VPS_HAS_BTRFS} && [ -z "${VPS_USE_FS_METHOD#btrfs}" ] && \
+            vps_exception ${LINENO} fatal "${VPS_USE_FS_METHOD} fs method selected but it's not available" ${FUNCNAME}
+        ! ${VPS_HAS_CP} && [ -z "${VPS_USE_FS_METHOD#cp}" ] && \
+            vps_exception ${LINENO} fatal "${VPS_USE_FS_METHOD} fs method selected but it's not available" ${FUNCNAME}
+    else
+        # otherwise set it accordingly (in order, least to _best_)
+        ${VPS_HAS_CP} && VPS_USE_FS_METHOD=cp
+        ${VPS_HAS_BTRFS} && VPS_USE_FS_METHOD=btrfs
+    fi
+    # if we can't get a method, fail
+    [ -z "${VPS_USE_FS_METHOD}" ] && \
+        vps_exception ${LINENO} fatal "unable to determine a valid fs method" ${FUNCNAME}
+
+    # check various utils
+    VPS_HAS_MOUNT=false
+    VPS_HAS_BRCTL=false
+    VPS_HAS_IPTABLES=false
+    VPS_HAS_DNSMASQ=false
+    VPS_HAS_DEBOOTSTRAP=false
+    VPS_HAS_FEBOOTSTRAP=false
+    VPS_HAS_PACMAN=false
+    VPS_HAS_MKARCHROOT=false
+    [ "$(type -t mount)" = "file" ] && VPS_HAS_MOUNT=true
+    [ "$(type -t brctl)" = "file" ] && VPS_HAS_BRCTL=true
+    [ "$(type -t iptables)" = "file" ] && VPS_HAS_IPTABLES=true
+    [ "$(type -t dnsmasq)" = "file" ] && VPS_HAS_DNSMASQ=true
+    [ "$(type -t debootstrap)" = "file" ] && VPS_HAS_DEBOOTSTRAP=true
+    [ "$(type -t febootstrap)" = "file" ] && VPS_HAS_FEBOOTSTRAP=true
+    [ "$(type -t pacman)" = "file" ] && VPS_HAS_PACMAN=true
+    [ "$(type -t mkarchroot)" = "file" ] && VPS_HAS_MKARCHROOT=true
+
+    return 0
+
+}

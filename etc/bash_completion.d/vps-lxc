@@ -1,0 +1,93 @@
+#!/bin/bash
+#bash completion for vps-lxc
+
+_vps-lxc () {
+
+    local cur prev
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    local command running dom tpl
+    command="$(ls -1 /vps/usr/lib/vps-lxc/cmd | sed -e "/[^a-z]/d")"
+    running="$(netstat -ax | grep -e "/command\$" | sed -e "s,.*LISTENING.*/\(.*\)/command\$,\\1,g")"
+    dom="$(ls /vps/var/lib/vps-lxc/dom)"
+    tpl="$(ls /vps/var/lib/vps-lxc/tpl)"
+
+    case "${prev}" in
+    vps-lxc)
+        # self
+        COMPREPLY=( $(compgen -W "help ${command}" -- ${cur}) )
+        return 0
+    ;;
+    define)
+        # not in lxc but in dom
+        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        return 0
+    ;;
+    edit)
+        # use dom
+        COMPREPLY=( $(compgen -W "help ${dom}" -- ${cur}) )
+        return 0
+    ;;
+    enter)
+        # use running
+        COMPREPLY=( $(compgen -W "help ${running}" -- ${cur}) )
+        return 0
+    ;;
+    ls)
+        COMPREPLY=( $(compgen -W "help dom tpl" -- ${cur}) )
+        return 0
+    ;;
+    mkdom)
+        # would like intelligent option completion here
+        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        return 0
+    ;;
+    mktpl)
+        # would like intelligent option completion here
+        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        return 0
+    ;;
+    monitor)
+        # use running
+        COMPREPLY=( $(compgen -W "help ${running}" -- ${cur}) )
+        return 0
+    ;;
+    reboot)
+        # use running
+        COMPREPLY=( $(compgen -W "help ${running}" -- ${cur}) )
+        return 0
+    ;;
+    rmdom)
+        # use dom
+        COMPREPLY=( $(compgen -W "help ${dom}" -- ${cur}) )
+        return 0
+    ;;
+    rmtpl)
+        # use tpl
+        COMPREPLY=( $(compgen -W "help ${tpl}" -- ${cur}) )
+        return 0
+    ;;
+    start)
+        # dom against running
+        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        return 0
+    ;;
+    stop)
+        # running against dom
+        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        return 0
+    ;;
+    tree)
+        # none
+        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        return 0
+    ;;
+    proto)
+        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        return 0
+    ;;
+    esac
+
+}
+complete -F _vps-lxc vps-lxc

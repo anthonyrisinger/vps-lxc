@@ -1,0 +1,53 @@
+ ) kernel configs + localmodconfig
+
+CONFIG_BTRFS_FS=m
+CONFIG_BTRFS_FS_POSIX_ACL=n
+CONFIG_LIBCRC32C=y
+CONFIG_ZLIB_INFLATE=y
+CONFIG_ZLIB_DEFLATE=y
+CONFIG_DEVPTS_MULTIPLE_INSTANCES=y
+CONFIG_GROUP_SCHED=y
+CONFIG_FAIR_GROUP_SCHED=y
+CONFIG_RT_GROUP_SCHED=y
+CONFIG_CGROUP_SCHED=y
+CONFIG_CGROUPS=y
+CONFIG_CGROUP_NS=y
+CONFIG_CGROUP_FREEZER=y
+CONFIG_CGROUP_DEVICE=y
+CONFIG_CPUSETS=y
+CONFIG_PROC_PID_CPUSET=y
+CONFIG_CGROUP_CPUACCT=y
+CONFIG_RESOURCE_COUNTERS=y
+CONFIG_CGROUP_MEM_RES_CTLR=y
+CONFIG_CGROUP_MEM_RES_CTLR_SWAP=y
+CONFIG_MM_OWNER=y
+CONFIG_NAMESPACES=y
+CONFIG_UTS_NS=y
+CONFIG_IPC_NS=y
+CONFIG_USER_NS=y
+CONFIG_PID_NS=y
+CONFIG_NET_NS=y
+CONFIG_NET_CLS_CGROUP=y
+CONFIG_SECURITY_FILE_CAPABILITIES=y
+CONFIG_BLK_DEV_LOOP=y
+CONFIG_EXT2_FS=m
+CONFIG_EXT3_FS=m
+CONFIG_EXT4_FS=m
+CONFIG_VNET=m
+
+ ) create packages, kernel26/btrfs-progs-git/libvirt-git/libcap-ng
+ ) create LARCH image w/2.6.32
+   point repositories at localproxy
+   load proxy with custom packages
+ ) modify target files
+   rc.local:
+
+rm -f /dev/ptmx
+ln -s pts/ptmx /dev/ptmx
+
+   fstab:
+
+/dev/pts devpts rw,newinstance 0 0
+none /cgroup cgroup rw,memory,devices,cpu,cpuacct 0 0
+
+

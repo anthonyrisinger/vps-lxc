@@ -1,0 +1,115 @@
+#!/bin/bash
+#
+# COMMAND reboot
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_REBOOT_TARGET:=}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} TARGET
+Reboot a defined, running domain
+
+Parameters:
+    TARGET   the defined domain to reboot
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    case "${opt}" in
+    *)
+        vps_exception ${LINENO} fatal "options not accepted" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local state dom=$(vps_str_clean_dom "${1}")
+    [ -z "${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain name is invalid" ${FUNCNAME}
+    ! [ -e "${VPS_LXC}/${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${dom}) does not exist" ${FUNCNAME}
+    VPS_REBOOT_TARGET="${dom}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    local state
+
+    # verify all required variables
+    [ -z "${VPS_REBOOT_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "a valid TARGET is required" ${FUNCNAME}
+    ! [ -e "${VPS_LXC}/${VPS_REBOOT_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${VPS_REBOOT_TARGET}) does not exist" ${FUNCNAME}
+    { mount | grep -q -e "${VPS_DEV}/${VPS_NAME}.*type cgroup"; } || \
+        vps_exception ${LINENO} fatal "cgroup not mounted at ${VPS_DEV}/${VPS_NAME}" ${FUNCNAME}
+
+    state="$(lxc-info -n "${VPS_REBOOT_TARGET}" | sed -e 's/.* is //')"
+    [ "${state}" != "RUNNING" ] && \
+        vps_exception ${LINENO} fatal "cannot reboot domain, current state is ${state}" ${FUNCNAME}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    local x pids comm found=false
+    vps_exception ${LINENO} info "rebooting domain ${VPS_REBOOT_TARGET}..." ${FUNCNAME}
+
+    pids="$(cat ${VPS_DEV}/${VPS_NAME}/${VPS_REBOOT_TARGET}/tasks)"
+    for x in ${pids}; do
+        comm="$(ps --no-headers -o comm -p ${x})"
+        if [ "${comm}" = "init" ]; then
+            kill -INT ${x}
+            found=true
+            break
+        fi
+    done
+    ${found} || \
+        vps_exception ${LINENO} fatal "could not find init process for ${VPS_REBOOT_TARGET}" ${FUNCNAME}
+
+    vps_exception ${LINENO} info "sent ${VPS_REBOOT_TARGET} a reboot signal" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    return 0
+
+}

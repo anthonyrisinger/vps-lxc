@@ -1,0 +1,7 @@
+#!/bin/bash
+
+vps_mktpl_postbuild () {
+
+    return 0
+
+}

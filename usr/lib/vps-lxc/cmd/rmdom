@@ -1,0 +1,111 @@
+#!/bin/bash
+#
+# COMMAND rmdom
+# remove an existing domain
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/fs_method || \
+        vps_exception ${LINENO} fatal "unable to source shared/fs_method"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":k"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_RMDOM_TARGET:=}
+    # -k
+    : ${VPS_RMDOM_KEEP:=false}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} [-k] TARGET
+Remove an existing domain and optionally retain it's definition files
+
+Options:
+    -k   do not remove the definition files
+Parameters:
+    TARGET   the domain to be removed
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    case "${opt}" in
+    k)
+        VPS_RMDOM_KEEP=true
+    ;;
+    :)
+        vps_exception ${LINENO} fatal "option -${optarg} requires an argument" ${FUNCNAME}
+    ;;
+    \?)
+        vps_exception ${LINENO} fatal "option -${optarg} is not valid" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local dom=$(vps_str_clean_dom "${1}")
+    [ -z "${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain name is invalid" ${FUNCNAME}
+    ! [ -e "${VPS_DOM}/${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${dom}) does not exist" ${FUNCNAME}
+    VPS_RMDOM_TARGET="${dom}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    # verify all required variables
+    [ -z "${VPS_RMDOM_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "a valid TARGET is required" ${FUNCNAME}
+    ! [ -e "${VPS_DOM}/${VPS_RMDOM_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${VPS_RMDOM_TARGET}) does not exist" ${FUNCNAME}
+    [ "${VPS_RMDOM_KEEP}" = "true" ] || VPS_RMDOM_KEEP=false
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    # if we make it this far, assume everything is ready to rock
+    vps_exception ${LINENO} info "removing domain ${VPS_RMDOM_TARGET}..." ${FUNCNAME}
+    vps_fs_method del ${VPS_DOM}/${VPS_RMDOM_TARGET}
+    lxc-destroy -n ${VPS_RMDOM_TARGET}
+    ${VPS_RMDOM_KEEP} || rm -f ${VPS_DEF}/{mnt,exec/sys}/${VPS_RMDOM_TARGET}.conf
+    vps_exception ${LINENO} info "domain ${VPS_RMDOM_TARGET} removed" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    return 0
+
+}

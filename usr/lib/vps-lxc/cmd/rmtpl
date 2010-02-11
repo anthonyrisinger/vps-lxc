@@ -1,0 +1,98 @@
+#!/bin/bash
+#
+# COMMAND rmtpl
+# remove an existing template
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/fs_method || \
+        vps_exception ${LINENO} fatal "unable to source shared/fs_method"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_RMTPL_TARGET:=}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} TARGET
+Remove an existing template
+
+Parameters:
+   TARGET   the template to be removed
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    case "${opt}" in
+    *)
+        vps_exception ${LINENO} fatal "options not accepted" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local tpl=$(vps_str_clean_tpl "${1}")
+    [ -z "${tpl}" ] && \
+        vps_exception ${LINENO} fatal "template name is invalid" ${FUNCNAME}
+    ! [ -e "${VPS_TPL}/${tpl}" ] && \
+        vps_exception ${LINENO} fatal "template ${tpl} does not exist" ${FUNCNAME}
+    VPS_RMTPL_TARGET="${tpl}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    # verify all required variables
+    [ -z "${VPS_RMTPL_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "a valid TARGET is required" ${FUNCNAME}
+    ! [ -e "${VPS_TPL}/${VPS_RMTPL_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "TARGET template ${VPS_RMTPL_TARGET} does not exist" ${FUNCNAME}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    # if we make it this far, assume everything is ready to rock
+    vps_exception ${LINENO} info "removing template ${VPS_RMTPL_TARGET}..." ${FUNCNAME}
+    vps_fs_method del ${VPS_TPL}/${VPS_RMTPL_TARGET}
+    vps_exception ${LINENO} info "template ${VPS_RMTPL_TARGET} removed" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    return 0
+
+}

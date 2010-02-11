@@ -1,0 +1,139 @@
+#!/bin/bash
+#
+# COMMAND monitor
+# monitor a RUNNING container's utmp file
+# reboot/shutdown the container when requested
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_MONITOR_TARGET:=}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} TARGET
+Monitor a domain for state changes
+
+Parameters:
+   TARGET   the domain to monitor
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    case "${opt}" in
+    :)
+        vps_exception ${LINENO} fatal "option -${optarg} requires an argument" ${FUNCNAME}
+    ;;
+    \?)
+        vps_exception ${LINENO} fatal "option -${optarg} is not valid" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local dom=$(vps_str_clean_dom "${1}")
+    [ -z "${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain name is invalid" ${FUNCNAME}
+    ! [ -e "${VPS_LXC}/${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${dom}) does not exist" ${FUNCNAME}
+    VPS_MONITOR_TARGET="${dom}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    local state
+    [ "$(type -t inotifywait)" = "file" ] || \
+        vps_exception ${LINENO} fatal "missing binary (inotifywait) needed to monitor" ${FUNCNAME}
+    # verify all required variables
+    [ -z "${VPS_MONITOR_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "a valid TARGET domain is required" ${FUNCNAME}
+    ! [ -e "${VPS_LXC}/${VPS_MONITOR_TARGET}" -a -e "${VPS_DOM}/${VPS_MONITOR_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain ${VPS_MONITOR_TARGET} does not exist" ${FUNCNAME}
+    state="$(lxc-info -n "${VPS_MONITOR_TARGET}" | sed -e 's/.* is //')"
+    [ "${state}" != "RUNNING" ] && \
+        vps_exception ${LINENO} fatal "cannot monitor domain, current state is ${state}" ${FUNCNAME}
+    { mount | grep -q -e "${VPS_DEV}/${VPS_NAME}.*type cgroup"; } || \
+        vps_exception ${LINENO} fatal "cgroup not mounted at ${VPS_DEV}/${VPS_NAME}" ${FUNCNAME}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    # if we make it this far, assume everything is ready to rock
+    vps_exception ${LINENO} info "monitoring domain ${VPS_MONITOR_TARGET}..." ${FUNCNAME}
+
+    local state runlevel utmp=${VPS_DOM}/${VPS_MONITOR_TARGET}/rootfs/var/run/utmp
+    while true; do
+        # time of 5 minutes on it JUST IN CASE...
+        inotifywait -qqt 300 ${utmp}
+        if [ "$(wc -l 2>/dev/null < ${VPS_DEV}/${VPS_NAME}/${VPS_MONITOR_TARGET}/tasks)" = 1 ]; then
+
+            runlevel="$(runlevel ${utmp})"
+
+            case "${runlevel}" in
+            N*)
+                # nothing for new boot state
+            ;;
+            ??0)
+                # halted...  kill vps.
+                lxc-stop -n "${VPS_MONITOR_TARGET}"
+                break
+            ;;
+            ??6)
+                # rebooting...  kill vps and start again...
+                lxc-stop -n ${VPS_MONITOR_TARGET}
+                lxc-wait -n ${VPS_MONITOR_TARGET} -s STOPPED
+                lxc-start -d -n ${VPS_MONITOR_TARGET} -o ${VPS_LOG}/dom/${VPS_MONITOR_TARGET}.log
+                # loop again.
+            ;;
+            *)
+                # make sure vps is still running
+                state="$(lxc-info -n "${VPS_MONITOR_TARGET}" | sed -e 's/.* is //')"
+                [ "${state}" = "RUNNING" ] || break
+            ;;
+            esac
+        fi
+    done
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    return 0
+
+}

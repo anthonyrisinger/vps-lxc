@@ -1,0 +1,43 @@
+#!/bin/bash
+
+vps_str_clean () {
+
+    echo "${1}" | sed -e "s,[^-_0-9A-Za-z],,g"
+    return 0
+
+}
+
+vps_str_clean_dom () {
+
+    vps_str_clean "${1}"
+    return 0
+
+}
+
+vps_str_clean_tpl () {
+
+    vps_str_clean "${1}"
+    return 0
+
+}
+
+vps_str_clean_distro () {
+
+    vps_str_clean "${1}"
+    return 0
+
+}
+
+vps_str_clean_profile () {
+
+    vps_str_clean "${1}"
+    return 0
+
+}
+
+vps_str_clean_mirror () {
+
+    echo "${1}" | sed -e "s,[^-_:/.0-9A-Za-z],,g"
+    return 0
+
+}

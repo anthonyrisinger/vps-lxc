@@ -1,0 +1,29 @@
+#!/bin/bash
+#
+# /etc/rc.sysinit
+#
+
+. /etc/rc.conf
+. /etc/rc.d/functions
+
+/bin/rm -f /etc/mtab*
+# Write /proc, /sys and /dev to /etc/mtab
+if [ -e /proc/mounts ]; then
+    /bin/grep -e "/proc " -e "/sys " -e "/dev " /proc/mounts >> /etc/mtab
+fi
+
+/bin/rm -f /etc/nologin &>/dev/null
+/bin/rm -f /etc/shutdownpid &>/dev/null
+/bin/rm -f /var/lock/* &>/dev/null
+/bin/rm -rf /tmp/* /tmp/.* &>/dev/null
+/bin/rm -f /forcefsck &>/dev/null
+(cd /var/run && /usr/bin/find . ! -type d -exec /bin/rm -f -- {} \; )
+: > /var/run/utmp
+/bin/chmod 0664 /var/run/utmp
+# Keep {x,k,g}dm happy with xorg
+/bin/mkdir /tmp/.ICE-unix && /bin/chmod 1777 /tmp/.ICE-unix
+/bin/mkdir /tmp/.X11-unix && /bin/chmod 1777 /tmp/.X11-unix
+
+if [ "$HOSTNAME" != "" ]; then
+    status "Setting Hostname: $HOSTNAME" /bin/hostname $HOSTNAME
+fi

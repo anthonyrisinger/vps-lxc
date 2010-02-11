@@ -1,0 +1,63 @@
+#!/bin/bash
+
+vps_mktpl_build () {
+
+    . ${VPS_MKTPL_ACTIVE_SHARED}/common
+
+    local err=0 packages static
+
+    packages="filesystem initscripts sed gawk coreutils filesystem texinfo grep pacman logrotate \
+    wget curl net-tools procps tar cpio zip unzip gzip bzip2 psmisc iputils dnsutils \
+    iproute2 less dash which vim sudo htop dcron dhcpcd util-linux-ng syslog-ng"
+
+    # create config
+    vps_mktpl_build_archlinux_conf || \
+        vps_exception ${LINENO} fatal "problem creating a pacman.conf file" ${FUNCNAME}
+
+    # build template
+    mkarchroot -C ${VPS_TMP}/pacman.conf rootfs ${packages} || \
+        vps_exception ${LINENO} \
+            fatal "creating template ${VPS_MKTPL_NAME} (w/mkarchroot) failed w/exit code ${?}" ${FUNCNAME}
+
+    # create devices
+    vps_mktpl_build_archlinux_dev || \
+        vps_exception ${LINENO} fatal "problem creating device files" ${FUNCNAME}
+
+    # copy static files
+    # /etc/bash.bashrc.local
+    cp ${VPS_MKTPL_ACTIVE_STATIC}/bash.bashrc.local rootfs/etc/bash.bashrc.local || ((err++))
+    # /bin/autologin
+    cp ${VPS_MKTPL_ACTIVE_STATIC}/autologin rootfs/bin/autologin || ((err++))
+    # /etc/rc.sysinit
+    cp ${VPS_MKTPL_ACTIVE_STATIC}/rc.sysinit rootfs/etc/rc.sysinit || ((err++))
+    # /etc/rc.single
+    cp ${VPS_MKTPL_ACTIVE_STATIC}/rc.single rootfs/etc/rc.single || ((err++))
+    # /etc/rc.shutdown
+    cp ${VPS_MKTPL_ACTIVE_STATIC}/rc.shutdown rootfs/etc/rc.shutdown || ((err++))
+    # /etc/rc.conf
+    cp ${VPS_MKTPL_ACTIVE_STATIC}/rc.conf rootfs/etc/rc.conf || ((err++))
+
+    [ ${err} -gt 0 ] && \
+        vps_exception ${LINENO} fatal "problem copying static files" ${FUNCNAME}
+
+    # misc
+    # kill /etc/skel/.bashrc
+    : > rootfs/etc/skel/.bashrc || ((err++))
+    # edit /etc/inittab for autologin/SIGINT/SIGPWR
+    sed -i -e "s,agetty,\\0 -n -l /bin/autologin,g" -e "/^[^irsc]\|^c[^1]\|^$/d" rootfs/etc/inittab || ((err++))
+    cat <<EOF >> rootfs/etc/inittab || ((err++))
+p6::ctrlaltdel:/sbin/init 6
+p0::powerfail:/sbin/init 0
+EOF
+
+    # cleanup
+    rm -f rootfs/.arch-chroot
+    chmod 555 rootfs || ((err++))
+
+    [ ${err} -gt 0 ] && \
+        vps_exception ${LINENO} fatal "problem finalizing build" ${FUNCNAME}
+
+    # this is critical! else last command (test/whatever) might trip generic exception
+    return 0
+
+}

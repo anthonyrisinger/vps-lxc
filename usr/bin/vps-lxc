@@ -1,0 +1,232 @@
+#!/bin/bash
+#
+# vps main
+
+vps_config () {
+
+    # source/find the configuration
+    if [ -z "${VPS_CONF}" ]; then
+        local x l=vps-lxc s=${l%-lxc} b=${VPS_SELF}
+        # this will break immediately on the first/best hit
+        for x in {,/usr,/vps,/usr/local,/opt,/opt/local}/etc/{${l}/${l},${s}/${s},${b}/${b}}.conf; do
+            [ -f "${x}" ] && VPS_CONF=${x} && break
+        done
+        [ -z "${VPS_CONF}" ] && \
+            vps_exception ${LINENO} fatal "unable to find configuration" ${FUNCNAME}
+    fi
+    ! . ${VPS_CONF} 2>&- && \
+        vps_exception ${LINENO} fatal "unable to source ${VPS_CONF}" ${FUNCNAME}
+
+}
+
+vps_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} COMMAND [help|OPTION]...
+Create, destroy, interact with, and manage LXC based Virtual Private Server
+(VPS/container) domains and templates.
+
+Creation/destruction COMMANDs:
+   mktpl    create a new template from scratch or based off an existing template
+   mkdom    create a new domain based off a pre-created template
+   rmtpl    remove a created template
+   rmdom    remove a defined/created, STOPPED domain and it's configuration
+Definition/edit COMMANDs:
+   define   initialize a domain after editing it's configuration (once)
+   edit     edit the persistent configuration of a VPS (requires reboot)
+Control/interaction COMMANDs:
+   start    send a STOPPED domain a signal to start
+   stop     send a RUNNING domain a signal to stop
+   reboot   send a RUNNING domain a signal to reboot
+   enter    enter a domain and interact via console (limited, config specific)
+Query COMMANDs:
+   help     what you are seeing right now
+   tree     view the VPS system's directories/files in a tree
+   ls       list each domain and/or template and their status
+EOF
+
+}
+
+vps_check_usage () {
+
+    local x cmd usage=false
+    cmd="${1#--}"; cmd="${cmd#-}";
+    [ "${VPS_USAGE}" = "${cmd}" ] && usage=true
+    [ "${VPS_HELP}" = "${cmd}" ] && usage=true
+    if ${usage}; then
+        vps_cmd_usage "${cmd}" 2>&- || vps_usage "$cmd" 2>&-
+        exit 0
+    fi
+
+}
+
+# prepend exception handler
+vps_register_handle_fatal () {
+
+    VPS_FATAL=("${1}" "${VPS_FATAL[@]}")
+
+}
+
+# remove exception handler
+vps_unregister_handle_fatal () {
+
+    # this trick will remove a handler from the stack
+    # we start from the back (%) as this will significantly
+    # reduce the possiblitly of a partial match. the array
+    # is then repacked (WITHOUT using quotes, else the missing
+    # item would be included in the pack)
+    VPS_FATAL=(${VPS_FATAL[@]%${1}})
+
+}
+
+# the default exception handler
+vps_handle_fatal () {
+
+    # pretty pointless
+    return 1
+
+}
+
+# normal cleanup
+vps_handle_exit () {
+
+    # just in case
+    [ "${VPS_TMP}" =  "${VPS_TMP#/tmp}" ] || rm -rf ${VPS_TMP}
+
+}
+
+# add message to stack and/maybe trip error handlers
+vps_exception () {
+
+    local self="${VPS_COMMAND:-${VPS_SELF}}" line="${1}" lvl="${2}" msg="${3}" func="${4:-main}"
+    local exception="${self}(${func}):${line} ${lvl}: ${msg}"
+    local exception_user="${lvl}: ${msg}"
+    case "${lvl}" in
+    info|warn)
+        VPS_STACK=("${VPS_STACK[@]}" "${exception}")
+        echo "${exception_user}"
+    ;;
+    debug)
+        ${VPS_DEBUG:-false} && \
+            VPS_STACK=("${VPS_STACK[@]}" "${exception}") && \
+            echo "${exception_user}"
+    ;;
+    fatal)
+        # run handlers, drop stack, exit
+        local x
+        VPS_STACK=("${VPS_STACK[@]}" "${exception}")
+        # run the fatal exception handlers in order
+        for x in "${VPS_FATAL[@]}"; do ${x}; done
+        # if debug drop variables
+        ${VPS_DEBUG:-false} && \
+            echo "DEBUG enabled... variable list:" && \
+            { set | grep ^VPS | sed -e "s/^/   /g"; }
+        # drop the stack
+        echo "FATAL exception encountered... stacktrace:"
+        for x in "${VPS_STACK[@]}"; do echo "   ${x}"; done
+        # exit and trip the exit handler
+        exit 1
+    ;;
+    esac
+
+}
+
+# set up traps
+trap 'vps_exception ${LINENO} fatal "caught SIGTERM"' TERM
+trap 'vps_exception ${LINENO} fatal "caught SIGINT"' INT
+trap vps_handle_exit EXIT
+
+# set self and source configuration
+VPS_SELF="$(basename ${0})"
+vps_config
+
+# set up standard variables
+VPS_PWD="$(pwd)"
+VPS_TMP="$(mktemp -d)"
+VPS_FATAL=(vps_handle_fatal)
+VPS_STACK=()
+
+# set up convenience variables
+VPS_DEF=${VPS_VAR}/lib/${VPS_NAME}/def
+VPS_DOM=${VPS_VAR}/lib/${VPS_NAME}/dom
+VPS_TPL=${VPS_VAR}/lib/${VPS_NAME}/tpl
+VPS_LOG=${VPS_VAR}/log/${VPS_NAME}
+
+# simplest usage case
+[ -z "${1}" ] && { vps_usage; exit 0; }
+
+# possible usage strings
+VPS_USAGE="usage"
+VPS_HELP="help"
+
+# check for usage invocation
+vps_check_usage "${1}"
+
+# source the primary init
+# this should set HAS/USE flags and defaults
+! . ${VPS_USR}/lib/${VPS_NAME}/init && \
+    vps_exception ${LINENO} fatal "unable to source ${VPS_NAME}/init"
+vps_init || \
+    vps_exception ${LINENO} fatal "generic fail in primary init"
+
+# COMMAND list
+VPS_COMMAND_LIST="$(ls -1 ${VPS_USR}/lib/${VPS_NAME}/cmd | sed -e "/[^a-z]/d")"
+
+# need a valid COMMAND to continue
+VPS_COMMAND="$(echo "${VPS_COMMAND_LIST}" | tr " " "\n" | grep "^${1}\$")"
+[ -z "${VPS_COMMAND}" ] && \
+    vps_exception ${LINENO} fatal "${1} is not a recognized COMMAND, try \"${VPS_SELF} help\""
+
+# escalate privileges if COMMAND is valid
+if [ -n "${VPS_SUDO}" ] && [ -n "${VPS_USER#$(whoami)}" ]; then
+    exec ${VPS_SUDO} ${0} "$@"
+fi
+
+# remove COMMAND from the argument list
+shift
+
+# create INCLUDE variable
+VPS_INC=${VPS_USR}/lib/${VPS_NAME}/include/${VPS_COMMAND}
+
+# source the COMMAND
+! . ${VPS_USR}/lib/${VPS_NAME}/cmd/${VPS_COMMAND} && \
+    vps_exception ${LINENO} fatal "unable to source COMMAND (${VPS_COMMAND})"
+
+# check for COMMAND usage invocation
+vps_check_usage "${1}"
+
+# init COMMAND
+vps_cmd_init || \
+    vps_exception ${LINENO} fatal "generic fail in COMMAND init"
+
+# sanity
+[ -z "${VPS_COMMAND_OPTSTR}" ] && \
+    vps_exception ${LINENO} fatal "COMMAND ${VPS_COMMAND} does not implement an OPTSTRING"
+
+# send each opt to the COMMAND handler
+while getopts "${VPS_COMMAND_OPTSTR}" OPT; do
+    vps_cmd_opt "${OPT}" "${OPTIND}" "${OPTARG}"
+done
+
+# remove the processed options
+shift $((OPTIND-1));
+
+# send each param to the COMMAND handler
+for PARAM in "${@}"; do
+    vps_cmd_param "${PARAM}"
+done
+
+# last chance for COMMAND to bail before main
+vps_cmd_pre_main || \
+    vps_exception ${LINENO} fatal "generic fail in COMMAND pre_main"
+
+# run the COMMAND main
+vps_cmd_main || \
+    vps_exception ${LINENO} fatal "generic fail in COMMAND main"
+
+# COMMAND cleanup, finalization, etc.
+vps_cmd_post_main || \
+    vps_exception ${LINENO} fatal "generic fail in COMMAND post_main"
+
+# we explicitly add this to trip the EXIT handler
+exit 0

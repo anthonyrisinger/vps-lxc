@@ -1,0 +1,158 @@
+#!/bin/bash
+#
+# COMMAND command.proto
+# copy this to include/proto and see it work
+
+# COMMAND init
+vps_cmd_init () {
+
+    vps_exception ${LINENO} fatal "COMMAND not implemented" ${FUNCNAME}
+
+    # includes
+    #. ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+    #    vps_exception ${LINENO} fatal "unable to source shared/str"
+    #. ${VPS_USR}/lib/${VPS_NAME}/shared/fs_method || \
+    #    vps_exception ${LINENO} fatal "unable to source shared/fs_method"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":a:b:c:"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    : ${VPS_PROTO_OPTIONA:="aye"}
+    : ${VPS_PROTO_OPTIONB:="bee"}
+    : ${VPS_PROTO_OPTIONC:="sea"}
+    : ${VPS_PROTO_PARAM:="default"}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} -a OPTIONA -b OPTIONB -c OPTIONC PARAM
+This is a prototype command used as the basis for other commands
+EOF
+
+    # show extended usage on help
+    [ "${1}" = "help" ] || return 0
+
+    cat <<EOF
+
+Options:
+   -a   explanation of option a
+   -b   explanation of option b
+   -c   explanation of option c
+Arguments:
+   OPTIONA   definition of argument OPTIONA
+   OPTIONB   definition of argument OPTIONB
+   OPTIONC   definition of argument OPTIONC
+Parameters:
+   PARAM   definition of parameter PARAM
+
+Closing statement with any last words
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    local optiona optionb optionc
+    case "${opt}" in
+    a)
+        optiona="$(echo "${optarg}")"
+        [ -z "${optiona}" ] && \
+            vps_exception ${LINENO} fatal "optiona is invalid" ${FUNCNAME}
+        VPS_PROTO_OPTIONA=${optiona}
+    ;;
+    b)
+        optionb="$(echo "${optarg}")"
+        [ -z "${optionb}" ] && \
+            vps_exception ${LINENO} fatal "optionb is invalid" ${FUNCNAME}
+        VPS_PROTO_OPTIONB=${optionb}
+    ;;
+    c)
+        optionc="$(echo "${optarg}")"
+        [ -z "${optionc}" ] && \
+            vps_exception ${LINENO} fatal "optionc is invalid" ${FUNCNAME}
+        VPS_PROTO_OPTIONC=${optionc}
+    ;;
+    :)
+        vps_exception ${LINENO} fatal "option -${optarg} requires an argument" ${FUNCNAME}
+    ;;
+    \?)
+        vps_exception ${LINENO} fatal "option -${optarg} is not valid" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local param="$(echo "${1}")"
+    [ -z "${param}" ] && \
+        vps_exception ${LINENO} fatal "param is invalid" ${FUNCNAME}
+    VPS_PROTO_PARAM="${param}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    # verify all required variables and pre processing in this block
+    [ -z "${VPS_PROTO_OPTIONA}" ] && \
+        vps_exception ${LINENO} fatal "optiona is invalid" ${FUNCNAME}
+    [ -z "${VPS_PROTO_OPTIONB}" ] && \
+        vps_exception ${LINENO} fatal "optionb is invalid" ${FUNCNAME}
+    [ -z "${VPS_PROTO_OPTIONC}" ] && \
+        vps_exception ${LINENO} fatal "optionc is invalid" ${FUNCNAME}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    # if we make it this far, assume everything is ready to rock
+    # register our handler
+    vps_register_handle_fatal vps_proto_fatal
+
+    vps_exception ${LINENO} info "running COMMAND ${VPS_COMMAND}" ${FUNCNAME}
+    # do whatever the command actual does in this block
+    echo "Global variables:"
+    set | grep ^VPS | sed -e "s/^/   /g"
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    # everything completed successfully, unregister fatal handler
+    vps_unregister_handle_fatal vps_proto_fatal
+
+    # do any post processing in this block
+    vps_exception ${LINENO} info "finished running COMMAND ${VPS_COMMAND}" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_proto_fatal () {
+
+    vps_exception ${LINENO} warn "running fatality handler for COMMAND ${VPS_COMMAND}" ${FUNCNAME}
+
+    return 0
+
+}

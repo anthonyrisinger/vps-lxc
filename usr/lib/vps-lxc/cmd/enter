@@ -1,0 +1,111 @@
+#!/bin/bash
+#
+# COMMAND enter
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_ENTER_TARGET:=}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} TARGET
+Enter a defined, running domain with an available tty
+
+Parameters:
+    TARGET   the defined domain to enter
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    case "${opt}" in
+    *)
+        vps_exception ${LINENO} warn "options not accepted" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local state dom=$(vps_str_clean_dom "${1}")
+    [ -z "${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain name is invalid" ${FUNCNAME}
+    ! [ -e "${VPS_LXC}/${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${dom}) does not exist" ${FUNCNAME}
+    VPS_ENTER_TARGET="${dom}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    local state active
+    # verify all required variables
+    [ -z "${VPS_ENTER_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "a valid TARGET is required" ${FUNCNAME}
+    ! [ -e "${VPS_LXC}/${VPS_ENTER_TARGET}" -a -e "${VPS_DOM}/${VPS_ENTER_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${VPS_ENTER_TARGET}) does not exist" ${FUNCNAME}
+    { mount | grep -q -e "${VPS_DEV}/${VPS_NAME}.*type cgroup"; } || \
+        vps_exception ${LINENO} fatal "cgroup not mounted at ${VPS_DEV}/${VPS_NAME}" ${FUNCNAME}
+
+    state="$(lxc-info -n "${VPS_ENTER_TARGET}" | sed -e 's/.* is //')"
+    [ "${state}" != "RUNNING" ] && \
+        vps_exception ${LINENO} fatal "cannot enter domain, current state is ${state}" ${FUNCNAME}
+
+    # source the target domain id
+    . <(sed -e "/^#/d" -e "s,^,VPS_ENTER_TARGET_,g" ${VPS_DOM}/${VPS_ENTER_TARGET}/id) 2>&- || \
+        vps_exception ${LINENO} fatal "unable to source ${VPS_ENTER_TARGET}/id" ${FUNCNAME}
+    [ -z "${VPS_ENTER_TARGET_DOM_TTY}" ] && \
+        vps_exception ${LINENO} fatal "domain ${VPS_ENTER_TARGET} is not configured with ttys" ${FUNCNAME}
+
+    active="$(netstat -ax | grep "CONNECTED.*${VPS_LXC}/${VPS_ENTER_TARGET}/command" | wc -l)"
+    [ ${active} -ge ${VPS_ENTER_TARGET_DOM_TTY} ] && \
+        vps_exception ${LINENO} fatal "no available ttys" ${FUNCNAME}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    vps_exception ${LINENO} info "entering domain ${VPS_ENTER_TARGET}..." ${FUNCNAME}
+    lxc-console -n ${VPS_ENTER_TARGET}
+    vps_exception ${LINENO} info "exited domain ${VPS_ENTER_TARGET}" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    return 0
+
+}

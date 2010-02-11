@@ -1,0 +1,11 @@
+TERM needs to be set to xterm
+
+implement ls and enter
+symlink id?
+change default mkdom to have empty network
+implement init
+build ubuntu
+remove 2vps from final
+color?
+build system for missing folders/make
+DONE add lxc-destroy to rmdom

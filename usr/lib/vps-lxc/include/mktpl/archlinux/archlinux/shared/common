@@ -1,0 +1,49 @@
+#!/bin/bash
+
+vps_mktpl_build_archlinux_conf () {
+
+    local arch
+    [ "${VPS_MKTPL_ARCH}" = "32" ] && arch=i686
+    [ "${VPS_MKTPL_ARCH}" = "64" ] && arch=x86_64
+    cat <<EOF > ${VPS_TMP}/pacman.conf || return 1
+[options]
+HoldPkg     = pacman glibc
+SyncFirst   = pacman
+IgnorePkg   = initscripts kernel26
+
+[core]
+Server = ${VPS_MKTPL_MIRROR}/\$repo/os/${arch}
+[extra]
+Server = ${VPS_MKTPL_MIRROR}/\$repo/os/${arch}
+[community]
+Server = ${VPS_MKTPL_MIRROR}/\$repo/os/${arch}
+EOF
+
+    return 0
+
+}
+
+vps_mktpl_build_archlinux_dev () {
+
+    local err=0 dev=rootfs/dev
+    rm -rf ${dev}
+    mkdir -p ${dev}
+    mkdir -m 755 ${dev}/pts || ((err++))
+    mkdir -m 1777 ${dev}/shm || ((err++))
+    mknod -m 600 ${dev}/initctl p || ((err++))
+    mknod -m 666 ${dev}/null c 1 3 || ((err++))
+    mknod -m 666 ${dev}/zero c 1 5 || ((err++))
+    mknod -m 666 ${dev}/full c 1 7 || ((err++))
+    mknod -m 666 ${dev}/random c 1 8 || ((err++))
+    mknod -m 666 ${dev}/urandom c 1 9 || ((err++))
+    mknod -m 666 ${dev}/tty0 c 4 0 || ((err++))
+    mknod -m 666 ${dev}/tty1 c 4 1 || ((err++))
+    mknod -m 666 ${dev}/tty c 5 0 || ((err++))
+    mknod -m 600 ${dev}/console c 5 1 || ((err++))
+    ln -s pts/ptmx ${dev}/ptmx || ((err++))
+    ln -s /proc/self/fd ${dev}/fd || ((err++))
+
+    [ ${err} -gt 0 ] && return 1
+    return 0
+
+}

@@ -1,0 +1,101 @@
+#!/bin/bash
+#
+# COMMAND define
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_DEFINE_TARGET:=}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} TARGET
+Define/initialize a new, configured domain into the LXC subsystem
+
+Parameters:
+    TARGET   the existing domain to define
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    case "${opt}" in
+    *)
+        vps_exception ${LINENO} fatal "options not accepted" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local dom=$(vps_str_clean_dom "${1}")
+    [ -z "${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain name is invalid" ${FUNCNAME}
+    ! [ -e "${VPS_DOM}/${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${dom}) does not exist" ${FUNCNAME}
+    VPS_DEFINE_TARGET="${dom}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    # verify all required variables
+    [ -z "${VPS_DEFINE_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "a valid TARGET is required" ${FUNCNAME}
+    [ -d "${VPS_LXC}/${VPS_DEFINE_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${VPS_DEFINE_TARGET}) already exists" ${FUNCNAME}
+    ! [ -e "${VPS_DOM}/${VPS_DEFINE_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${VPS_DEFINE_TARGET}) does not exist" ${FUNCNAME}
+    ! [ -e "${VPS_DOM}/${VPS_DEFINE_TARGET}/config" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${VPS_DEFINE_TARGET}) config does not exist" ${FUNCNAME}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    # if we make it this far, assume everything is ready to rock
+    # register our handler
+    vps_exception ${LINENO} info "defining domain ${VPS_DEFINE_TARGET}..." ${FUNCNAME}
+    lxc-create -f ${VPS_DOM}/${VPS_DEFINE_TARGET}/config -n ${VPS_DEFINE_TARGET} || \
+        vps_exception ${LINENO} fatal "error defining domain ${VPS_DEFINE_TARGET}" ${FUNCNAME}
+    vps_exception ${LINENO} info "domain ${VPS_DEFINE_TARGET} defined" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    return 0
+
+}

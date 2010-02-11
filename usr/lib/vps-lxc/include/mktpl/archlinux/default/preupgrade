@@ -1,0 +1,13 @@
+#!/bin/bash
+
+vps_mktpl_preupgrade () {
+
+    ${VPS_HAS_PACMAN} || \
+        vps_exception ${LINENO} fatal "missing binary (pacman) needed to use this profile" ${FUNCNAME}
+
+    # if mirror is already set, do not override
+    : ${VPS_MKTPL_MIRROR:="http://distro.ibiblio.org/pub/linux/distributions/archlinux"}
+
+    return 0
+
+}

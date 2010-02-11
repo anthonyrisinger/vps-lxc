@@ -1,0 +1,115 @@
+#!/bin/bash
+#
+# COMMAND stop
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_STOP_TARGET:=}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} TARGET
+Stop a defined, running domain
+
+Parameters:
+    TARGET   the defined domain to stop
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    case "${opt}" in
+    *)
+        vps_exception ${LINENO} fatal "options not accepted" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local state dom=$(vps_str_clean_dom "${1}")
+    [ -z "${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain name is invalid" ${FUNCNAME}
+    ! [ -e "${VPS_LXC}/${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${dom}) does not exist" ${FUNCNAME}
+    VPS_STOP_TARGET="${dom}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    local state
+
+    # verify all required variables
+    [ -z "${VPS_STOP_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "a valid TARGET is required" ${FUNCNAME}
+    ! [ -e "${VPS_LXC}/${VPS_STOP_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${VPS_STOP_TARGET}) does not exist" ${FUNCNAME}
+    { mount | grep -q -e "${VPS_DEV}/${VPS_NAME}.*type cgroup"; } || \
+        vps_exception ${LINENO} fatal "cgroup not mounted at ${VPS_DEV}/${VPS_NAME}" ${FUNCNAME}
+
+    state="$(lxc-info -n "${VPS_STOP_TARGET}" | sed -e 's/.* is //')"
+    [ "${state}" != "RUNNING" ] && \
+        vps_exception ${LINENO} fatal "cannot stop domain, current state is ${state}" ${FUNCNAME}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    local x pids comm found=false
+    vps_exception ${LINENO} info "stopping domain ${VPS_STOP_TARGET}..." ${FUNCNAME}
+
+    pids="$(cat ${VPS_DEV}/${VPS_NAME}/${VPS_STOP_TARGET}/tasks)"
+    for x in ${pids}; do
+        comm="$(ps --no-headers -o comm -p ${x})"
+        if [ "${comm}" = "init" ]; then
+            kill -PWR ${x}
+            found=true
+            break
+        fi
+    done
+    ${found} || \
+        vps_exception ${LINENO} fatal "could not find init process for ${VPS_STOP_TARGET}" ${FUNCNAME}
+
+    vps_exception ${LINENO} info "sent ${VPS_STOP_TARGET} a powerdown signal" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    return 0
+
+}

@@ -1,0 +1,309 @@
+#!/bin/bash
+#
+# COMMAND mktpl
+# generate an LXC container template
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/fs_method || \
+        vps_exception ${LINENO} fatal "unable to source shared/fs_method"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":b:d:a:p:m:"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_MKTPL_TARGET:=}
+    # -b BASE
+    : ${VPS_MKTPL_BASE:=}
+    # -d DISTRO
+    : ${VPS_MKTPL_DISTRO:=}
+    # -a ARCH
+    : ${VPS_MKTPL_ARCH:=}
+    # -p PROFILE
+    : ${VPS_MKTPL_PROFILE:=default}
+    # -m MIRROR
+    : ${VPS_MKTPL_MIRROR:=}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} (-b BASE | -d DISTRO -a ARCH)
+       [-p PROFILE] [-m MIRROR] TARGET
+Generate a VPS template using bootstrap utilities to build it from scratch, or
+base it off an existing template and add/modify packages/configuration
+EOF
+
+    # show extended usage on help
+    [ "${1}" = "help" ] || return 0
+
+    cat <<EOF
+
+Options:
+   -b   specifies the template used as a base for this one;
+        arch and distribution will be ignored if provided
+   -d   the distribution to build
+   -a   target architecture
+   -p   distribution specific profile; default if not provided
+   -m   the mirror to use for download; overrides internal
+Arguments:
+   BASE      name of an existing template
+   DISTRO    an existing folder in include/mktpl
+   ARCH      either 32 or 64
+   PROFILE   an existing folder in include/mktpl/DISTRO
+   MIRROR    distribution specific mirror to use in the
+             form http://...
+Parameters:
+   TARGET   the name of the template to be created
+
+Options not defined can/may be set by the selected profile
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    local base distro arch profile mirror
+    case "${opt}" in
+    b)
+        base=$(vps_str_clean_tpl  "${optarg}")
+        [ -z "${base}" ] && \
+            vps_exception ${LINENO} fatal "base template name is invalid" ${FUNCNAME}
+        ! [ -e ${VPS_TPL}/${base} ] && \
+            vps_exception ${LINENO} fatal "base template ${base} does not exist" ${FUNCNAME}
+        VPS_MKTPL_BASE=${base}
+    ;;
+    d)
+        distro=$(vps_str_clean_distro  "${optarg}")
+        [ -z "${distro}" ] && \
+            vps_exception ${LINENO} fatal "distribution name is invalid" ${FUNCNAME}
+        ! [ -d ${VPS_INC}/${distro} ] && \
+            vps_exception ${LINENO} fatal "distribution ${distro} is not defined" ${FUNCNAME}
+        VPS_MKTPL_DISTRO=${distro}
+    ;;
+    a)
+        arch=$(vps_str_clean  "${optarg}" | grep -e "^\(32\|64\)\$")
+        [ -z "${arch}" ] && \
+            vps_exception ${LINENO} fatal "architecture type is invalid, select either 32 or 64" ${FUNCNAME}
+        VPS_MKTPL_ARCH=${arch}
+    ;;
+    p)
+        profile=$(vps_str_clean_profile  "${optarg}")
+        [ -z "${profile}" ] && \
+            vps_exception ${LINENO} fatal "profile name is invalid" ${FUNCNAME}
+        VPS_MKTPL_PROFILE=${profile}
+    ;;
+    m)
+        mirror=$(vps_str_clean_mirror  "${optarg}")
+        mirror=${mirror%/}
+        [ -z "${mirror}" ] && \
+            vps_exception ${LINENO} fatal "mirror is invalid" ${FUNCNAME}
+        ! expr "${mirror}" : "^http://" > /dev/null && \
+            vps_exception ${LINENO} fatal "mirror does not appear to be a valid URL (http://...)" ${FUNCNAME}
+        VPS_MKTPL_MIRROR=${mirror}
+    ;;
+    :)
+        vps_exception ${LINENO} fatal "option -${optarg} requires an argument" ${FUNCNAME}
+    ;;
+    \?)
+        vps_exception ${LINENO} fatal "option -${optarg} is not valid" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local param=$(vps_str_clean_tpl  "${1}")
+    [ -z "${param}" ] && \
+        vps_exception ${LINENO} fatal "template name is invalid" ${FUNCNAME}
+    [ -e "${VPS_TPL}/${param}" ] && \
+        vps_exception ${LINENO} fatal "template ${param} already exists" ${FUNCNAME}
+    VPS_MKTPL_TARGET="${param}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    if [ -n "${VPS_MKTPL_BASE}" ]; then
+        . <(sed -e "/^#/d" -e "s,^,VPS_MKTPL_BASE_,g" ${VPS_TPL}/${VPS_MKTPL_BASE}/id) || \
+            vps_exception ${LINENO} fatal "sourcing base template id failed (${VPS_MKTPL_BASE})" ${FUNCNAME}
+        [ -z "${VPS_MKTPL_BASE_TPL_DISTRO}" ] && \
+            vps_exception ${LINENO} fatal "distribution missing from template ${VPS_MKTPL_BASE}" ${FUNCNAME}
+        [ -z "${VPS_MKTPL_BASE_TPL_ARCH}" ] && \
+            vps_exception ${LINENO} fatal "architecture missing from template ${VPS_MKTPL_BASE}" ${FUNCNAME}
+        [ -n "${VPS_MKTPL_DISTRO#${VPS_MKTPL_BASE_TPL_DISTRO}}" ] && \
+            vps_exception ${LINENO} warn \
+                "setting distribution to ${VPS_MKTPL_BASE_TPL_DISTRO} from ${VPS_MKTPL_DISTRO}" ${FUNCNAME}
+        [ -n "${VPS_MKTPL_ARCH#${VPS_MKTPL_BASE_TPL_ARCH}}" ] && \
+            vps_exception ${LINENO} warn \
+                "setting architecture to ${VPS_MKTPL_BASE_TPL_ARCH} from ${VPS_MKTPL_ARCH}" ${FUNCNAME}
+        VPS_MKTPL_DISTRO="${VPS_MKTPL_BASE_TPL_DISTRO}"
+        VPS_MKTPL_ARCH="${VPS_MKTPL_BASE_TPL_ARCH}"
+        : ${VPS_MKTPL_MIRROR:="${VPS_MKTPL_BASE_TPL_MIRROR}"}
+        # same as prebuild below, we don't care if this exists or not
+        . ${VPS_INC}/${VPS_MKTPL_DISTRO}/${VPS_MKTPL_PROFILE}/preupgrade 2>&-
+        [ "$(type -t vps_mktpl_preupgrade)" = "function" ] && vps_mktpl_preupgrade
+    else
+        # source the prebuild include to possibly set up defaults for anything missing.
+        # this might not exist but a silent fail is fine.  we will assume that
+        # variables set by an include are good and dont need to be checked... :-/
+        # prebuild will need to check if a variable is already defined (i.e. defined
+        # via the command line or from config file) before overwriting.  this could
+        # be used to force certain variables on a per profile basis, like distro/arch/mirror
+        . ${VPS_INC}/${VPS_MKTPL_DISTRO}/${VPS_MKTPL_PROFILE}/prebuild 2>&-
+        [ "$(type -t vps_mktpl_prebuild)" = "function" ] && vps_mktpl_prebuild
+    fi
+
+    # profile=distro is reserved
+    [ -n "${VPS_MKTPL_DISTRO}" -a -n "${VPS_MKTPL_PROFILE}" -a -z "${VPS_MKTPL_DISTRO#"${VPS_MKTPL_PROFILE}"}" ] && \
+        vps_exception ${LINENO} fatal \
+            "profile with same name as distribution reserved for shared resources" ${FUNCNAME}
+
+    # verify all required variables
+    [ -z "${VPS_MKTPL_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "a valid template NAME is required" ${FUNCNAME}
+    [ -z "${VPS_MKTPL_DISTRO}" ] && \
+        vps_exception ${LINENO} fatal "distribution is not defined" ${FUNCNAME}
+    [ -z "${VPS_MKTPL_PROFILE}" ] && \
+        vps_exception ${LINENO} fatal "profile is not defined" ${FUNCNAME}
+    [ -z "${VPS_MKTPL_ARCH}" ] && \
+        vps_exception ${LINENO} fatal "architecture is not defined" ${FUNCNAME}
+    [ -z "${VPS_MKTPL_MIRROR}" ] && \
+        vps_exception ${LINENO} fatal "mirror is not defined" ${FUNCNAME}
+
+    # check again due to possible overwrites
+    # we use -e and not -d here due to btrfs
+    [ -e "${VPS_TPL}/${VPS_MKTPL_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "template ${VPS_MKTPL_TARGET} already exists" ${FUNCNAME}
+    # verify distribution
+    ! [ -d ${VPS_INC}/${VPS_MKTPL_DISTRO} ] && \
+        vps_exception ${LINENO} fatal "distribution ${VPS_MKTPL_DISTRO} does not exist" ${FUNCNAME}
+    # verify a valid profile
+    ! [ -d ${VPS_INC}/${VPS_MKTPL_DISTRO}/${VPS_MKTPL_PROFILE} ] && \
+        vps_exception ${LINENO} fatal \
+            "profile ${VPS_MKTPL_PROFILE} for distribution ${VPS_MKTPL_DISTRO} does not exist" ${FUNCNAME}
+
+    # if upgrade ensure the selected profile supports; if build ensure support
+    if [ -n "${VPS_MKTPL_BASE}" ]; then
+        ! [ -e "${VPS_INC}/${VPS_MKTPL_DISTRO}/${VPS_MKTPL_PROFILE}/upgrade" ] && \
+        vps_exception ${LINENO} fatal "profile (${VPS_MKTPL_PROFILE}) does not support template upgrading" ${FUNCNAME}
+    else
+        ! [ -e "${VPS_INC}/${VPS_MKTPL_DISTRO}/${VPS_MKTPL_PROFILE}/build" ] && \
+        vps_exception ${LINENO} fatal "profile (${VPS_MKTPL_PROFILE}) does not support template building" ${FUNCNAME}
+    fi
+
+    # set up some new variables for use in (post)?main
+    VPS_MKTPL_ACTIVE_DISTRO=${VPS_INC}/${VPS_MKTPL_DISTRO}
+    VPS_MKTPL_ACTIVE_PROFILE=${VPS_MKTPL_ACTIVE_DISTRO}/${VPS_MKTPL_PROFILE}
+    # set shared dir
+    if [ -d "${VPS_MKTPL_ACTIVE_PROFILE}/shared" ]; then
+        VPS_MKTPL_ACTIVE_SHARED=${VPS_MKTPL_ACTIVE_PROFILE}/shared
+    else
+        VPS_MKTPL_ACTIVE_SHARED=${VPS_MKTPL_ACTIVE_DISTRO}/${VPS_MKTPL_DISTRO}/shared
+    fi
+    # set static dir
+    if [ -d "${VPS_MKTPL_ACTIVE_PROFILE}/static" ]; then
+        VPS_MKTPL_ACTIVE_STATIC=${VPS_MKTPL_ACTIVE_PROFILE}/static
+    else
+        VPS_MKTPL_ACTIVE_STATIC=${VPS_MKTPL_ACTIVE_DISTRO}/${VPS_MKTPL_DISTRO}/static
+    fi
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    # if we make it this far, assume everything is ready to rock
+    # register our handler
+    vps_register_handle_fatal vps_mktpl_fatal
+    if [ -z "${VPS_MKTPL_BASE}" ]; then
+        vps_exception ${LINENO} info "building template (${VPS_MKTPL_TARGET}), please wait..." ${FUNCNAME}
+        vps_fs_method init ${VPS_TPL}/${VPS_MKTPL_TARGET}
+        # start the build
+        cd ${VPS_TPL}/${VPS_MKTPL_TARGET}
+        . ${VPS_MKTPL_ACTIVE_PROFILE}/build
+        vps_mktpl_build || \
+            vps_exception ${LINENO} fatal "generic fail building template" ${FUNCNAME}
+        cd ${VPS_PWD}
+    else
+        vps_exception ${LINENO} info "forking template, please wait..." ${FUNCNAME}
+        vps_fs_method fork ${VPS_TPL}/${VPS_MKTPL_TARGET} ${VPS_TPL}/${VPS_MKTPL_BASE}
+        # start the upgrade
+        cd ${VPS_TPL}/${VPS_MKTPL_TARGET}
+        . ${VPS_MKTPL_ACTIVE_PROFILE}/upgrade
+        vps_mktpl_upgrade || \
+            vps_exception ${LINENO} fatal "generic fail upgrading template" ${FUNCNAME}
+        cd ${VPS_PWD}
+    fi
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    # create the id file
+    cat <<EOF > ${VPS_TPL}/${VPS_MKTPL_TARGET}/id
+# generated by ${VPS_COMMAND}
+# $(date)
+TPL_TARGET="${VPS_MKTPL_TARGET}"
+TPL_BASE="${VPS_MKTPL_BASE}"
+TPL_DISTRO="${VPS_MKTPL_DISTRO}"
+TPL_PROFILE="${VPS_MKTPL_PROFILE}"
+TPL_ARCH="${VPS_MKTPL_ARCH}"
+TPL_MIRROR="${VPS_MKTPL_MIRROR}"
+EOF
+
+    # run post(build|upgrade) if it exists
+    if [ -z "${VPS_MKTPL_BASE}" ]; then
+        . ${VPS_MKTPL_ACTIVE_PROFILE}/postbuild 2>&-
+        if [ "$(type -t vps_mktpl_postbuild)" = "function" ]; then
+            vps_mktpl_postbuild || \
+                vps_exception ${LINENO} fatal "generic fail in template postbuild" ${FUNCNAME}
+        fi
+    else
+        . ${VPS_MKTPL_ACTIVE_PROFILE}/postupgrade 2>&-
+        if [ "$(type -t vps_mktpl_postupgrade)" = "function" ]; then
+            vps_mktpl_postupgrade || \
+                vps_exception ${LINENO} fatal "generic fail in template postupgrade" ${FUNCNAME}
+        fi
+    fi
+    # everything completed successfully, unregister fatal handler
+    vps_unregister_handle_fatal vps_mktpl_fatal
+    vps_exception ${LINENO} info "finished building template ${VPS_MKTPL_TARGET}" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_mktpl_fatal () {
+
+    cd ${VPS_PWD}
+    vps_exception ${LINENO} info "removing failed template, please wait..." ${FUNCNAME}
+    vps_fs_method del ${VPS_TPL}/${VPS_MKTPL_TARGET}
+
+    return 0
+
+}

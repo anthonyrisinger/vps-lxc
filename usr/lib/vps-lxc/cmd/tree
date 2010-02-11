@@ -1,0 +1,81 @@
+#!/bin/bash
+#
+# COMMAND rmtpl
+# remove an existing template
+
+# COMMAND init
+vps_cmd_init () {
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":"
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND}
+View all VPS directories and files in a tree structure
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    case "${opt}" in
+    *)
+        vps_exception ${LINENO} warn "options not accepted" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    vps_exception ${LINENO} warn "parameters not accepted" ${FUNCNAME}
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    [ "$(type -t tree)" = "file" ] || \
+        vps_exception ${LINENO} fatal "missing binary (tree) needed to display" ${FUNCNAME}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+ 
+    # the -I rootfs stops tree from recursing into dom/tpl filesystems
+    if [ -n "${VPS_BASE}" ]; then
+        tree --noreport -I rootfs\|dev ${VPS_BASE}
+    else
+        tree --noreport -I rootfs\|dev \
+            ${VPS_ETC}/${VPS_NAME} \
+            ${VPS_USR}/{lib,share/doc}/${VPS_NAME} \
+            ${VPS_VAR}/{lib,log,run}/${VPS_NAME}
+    fi
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    return 0
+
+}

@@ -1,0 +1,51 @@
+#!/bin/bash
+
+vps_fs_method () {
+
+    local method="${1}" target="${2}" orig="${3}"
+    local target_base orig_base
+    local target_name orig_name
+    local target_fail=0
+    target_base="${target%/*}"
+    target_name="${target##*/}"
+    if [ -n "$orig" ]; then
+        orig_base="${orig%/*}"
+        orig_name="${orig##*/}"
+        [ "${orig_base}" = "${orig_base#${VPS_TPL}}" ] && \
+            vps_exception ${LINENO} fatal "fs base operation out of bounds" ${FUNCNAME}
+    fi
+    [ "${target_base}" = "${target_base#${VPS_TPL}}" ] && ((target_fail++))
+    [ "${target_base}" = "${target_base#${VPS_DOM}}" ] && ((target_fail++))
+    [ ${target_fail} -gt 1 ] && vps_exception ${LINENO} fatal "fs target operation out of bounds" ${FUNCNAME}
+    case "${VPS_USE_FS_METHOD}" in
+    btrfs)
+        case "${method}" in
+        init)
+            btrfsctl -S ${target_name} ${target_base}
+        ;;
+        fork)
+            btrfsctl -s ${target_base}/${target_name} ${orig_base}/${orig_name}
+        ;;
+        del)
+            btrfsctl -D ${target_name} ${target_base}
+        ;;
+        esac
+    ;;
+    cp)
+        case "${method}" in
+        init)
+            mkdir ${target_base}/${target_name}
+        ;;
+        fork)
+            cp -R ${orig_base}/${orig_name} ${target_base}/${target_name}
+        ;;
+        del)
+            rm -rf ${orig_base}/${orig_name}
+        ;;
+        esac
+    ;;
+    esac
+
+    return 0
+
+}

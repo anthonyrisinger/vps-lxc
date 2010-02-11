@@ -1,0 +1,9 @@
+#!/bin/bash
+
+vps_mkdom_prebuild () {
+
+    VPS_MKDOM_NETWORK=("type=empty" "${VPS_MKDOM_NETWORK[@]}")
+
+    return 0
+
+}

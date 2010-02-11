@@ -1,0 +1,7 @@
+#!/bin/bash
+
+vps_mktpl_postupgrade () {
+
+    return 0
+
+}

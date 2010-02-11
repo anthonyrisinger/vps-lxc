@@ -1,0 +1,115 @@
+#!/bin/bash
+#
+# COMMAND start
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_START_TARGET:=}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} TARGET
+Start a defined, stopped domain
+
+Parameters:
+    TARGET   the defined domain to start
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    case "${opt}" in
+    *)
+        vps_exception ${LINENO} fatal "options not accepted" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local state dom=$(vps_str_clean_dom "${1}")
+    [ -z "${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain name is invalid" ${FUNCNAME}
+    ! [ -e "${VPS_LXC}/${dom}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${dom}) does not exist" ${FUNCNAME}
+    VPS_START_TARGET="${dom}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    local state
+
+    # verify all required variables
+    [ -z "${VPS_START_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "a valid TARGET is required" ${FUNCNAME}
+    ! [ -e "${VPS_LXC}/${VPS_START_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "TARGET domain (${VPS_START_TARGET}) does not exist" ${FUNCNAME}
+
+    state="$(lxc-info -n "${VPS_START_TARGET}" | sed -e 's/.* is //')"
+    [ "${state}" != "STOPPED" ] && \
+        vps_exception ${LINENO} fatal "cannot start domain, current state is ${state}" ${FUNCNAME}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    local state
+
+    # if we make it this far, assume everything is ready to rock
+    # register our handler
+    vps_exception ${LINENO} info "starting domain ${VPS_START_TARGET}..." ${FUNCNAME}
+
+    lxc-start -d -n ${VPS_START_TARGET} -o ${VPS_LOG}/dom/${VPS_START_TARGET}.log || \
+        vps_exception ${LINENO} fatal "error starting domain ${VPS_START_TARGET}" ${FUNCNAME}
+    timeout 2s lxc-wait -n ${VPS_START_TARGET} -s "RUNNING|ABORTING|STOPPING"
+    state="$(lxc-info -n "${VPS_START_TARGET}" | sed -e 's/.* is //')"
+    # start the monitor on this vps if all is well
+    if [ "${state}" = "RUNNING" ]; then
+        nohup ${VPS_USR}/bin/${VPS_SELF} monitor ${VPS_START_TARGET} > /dev/null 2>&1 &
+    else
+        vps_exception ${LINENO} fatal "domain ${VPS_START_TARGET} started, but is not RUNNING" ${FUNCNAME}
+    fi
+
+    vps_exception ${LINENO} info "domain ${VPS_START_TARGET} started" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    return 0
+
+}

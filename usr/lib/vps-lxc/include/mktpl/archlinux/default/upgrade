@@ -1,0 +1,46 @@
+#!/bin/bash
+
+vps_mktpl_upgrade () {
+
+    . ${VPS_MKTPL_ACTIVE_SHARED}/common
+
+    local err=0 packages
+
+    packages="filesystem initscripts sed gawk coreutils texinfo grep pacman logrotate \
+    wget curl net-tools procps tar cpio zip unzip gzip bzip2 psmisc iputils dnsutils \
+    iproute2 less dash which vim sudo htop dcron dhcpcd util-linux-ng syslog-ng"
+
+    # get real package list
+    packages="$(comm -13 <(pacman -r rootfs -Qq | sort -u) <(echo "${packages}" | tr " " "\n" | sort -u))"
+
+    if [ -z "${packages}" ]; then
+        vps_exception ${LINENO} warn "no packages will be installed" ${FUNCNAME}
+    else
+        local x
+        vps_register_handle_fatal vps_mktpl_upgrade_fatal
+        for x in dev sys proc; do
+            mount -o bind /${x} rootfs/${x}
+        done
+        pacman -r rootfs --noconfirm -Sy ${packages} || \
+            vps_exception ${LINENO} fatal "upgrading template via pacman failed with exit code ${?}" ${FUNCNAME}
+        for special in dev sys proc; do
+            umount rootfs/${special}
+        done
+        vps_unregister_handle_fatal vps_mktpl_upgrade_fatal
+    fi
+
+    return 0
+
+}
+
+vps_mktpl_upgrade_fatal () {
+
+    local x
+    vps_exception ${LINENO} info "umounting dev/sys/proc in rootfs..." ${FUNCNAME}
+    for x in dev sys proc; do
+        umount rootfs/${x}
+    done
+
+    return 0
+
+}

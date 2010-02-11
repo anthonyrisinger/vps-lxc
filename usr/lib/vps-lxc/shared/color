@@ -1,0 +1,26 @@
+#!/bin/bash
+
+vps_color_gen (){
+    local x
+    for x in "$@"; do echo -en "\e[${x}m"; done
+}
+
+# attributes
+VPS_COLOR_BOLD=$(vps_color_gen 1)
+VPS_COLOR_BLINK=$(vps_color_gen 5)
+
+# colors
+VPS_COLOR_DEFAULT=$(vps_color_gen 0)
+VPS_COLOR_BLACK=$(vps_color_gen 30)
+VPS_COLOR_RED=$(vps_color_gen 31)
+VPS_COLOR_GREEN=$(vps_color_gen 32)
+VPS_COLOR_BROWN=$(vps_color_gen 33)
+VPS_COLOR_BLUE=$(vps_color_gen 34)
+VPS_COLOR_PURPLE=$(vps_color_gen 35)
+VPS_COLOR_CYAN=$(vps_color_gen 36)
+VPS_COLOR_GRAY=$(vps_color_gen 37)
+
+# by purpose
+: ${VPS_COLOR_INFO:=${VPS_COLOR_GRAY}}
+: ${VPS_COLOR_WARN:=${VPS_COLOR_CYAN}}
+: ${VPS_COLOR_FATAL:=${VPS_COLOR_RED}}

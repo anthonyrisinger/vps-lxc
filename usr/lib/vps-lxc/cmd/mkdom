@@ -1,0 +1,367 @@
+#!/bin/bash
+#
+# COMMAND mkdom
+# generate an LXC container domain from an existing template
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/fs_method || \
+        vps_exception ${LINENO} fatal "unable to source shared/fs_method"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":b:p:h:n:s:t:c:"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_MKDOM_TARGET:=}
+    # -b BASE
+    : ${VPS_MKDOM_BASE:=}
+    # -p PROFILE
+    : ${VPS_MKDOM_PROFILE:=default}
+    # -u HOSTNAME
+    : ${VPS_MKDOM_HOSTNAME:=}
+    # -n type=TYPE,flags=FLAGS,link=LINK,name=NAME,hwaddr=HWADDR,ipv4=IPV4,ipv6=IPV6
+    if [ ${#VPS_MKDOM_NETWORK[@]} -eq 0 ]; then
+        VPS_MKDOM_NETWORK=()
+    else
+        VPS_MKDOM_NETWORK=("${VPS_MKDOM_NETWORK[@]}")
+    fi
+    # -s DEVPTS
+    : ${VPS_MKDOM_DEVPTS:=1024}
+    # -t TTY
+    : ${VPS_MKDOM_TTY:=2}
+    # -c subsys.param=VALUE,subsys.param=VALUE,subsys.param=VALUE
+    if [ ${#VPS_MKDOM_CGROUP[@]} -eq 0 ]; then
+        VPS_MKDOM_CGROUP=()
+    else
+        VPS_MKDOM_CGROUP=("${VPS_MKDOM_CGROUP[@]}")
+    fi
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} -b BASE [-p PROFILE] [-h HOSTNAME] [-t TTY] [-s DEVPTS]
+       [-n type=TYPE,flags=FLAGS,link=LINK,name=NAME,hwaddr=HWADDR,ipv4=IPV4,ipv6=IPV6]...
+       [-c subsys.param=VALUE]... TARGET
+Generate a VPS domain using an existing template as a base.  The resultant domain
+configuration is altered according to the selected profile and any options passed
+EOF
+
+    # show extended usage on help
+    [ "${1}" = "help" ] || return 0
+
+    cat <<EOF
+
+Options:
+   -b   specifies the template used as a base for this domain
+   -p   the profile to use; default if not provided
+   -h   the hostname assigned to this domain; defaults to NAME
+        if not provided
+   -t   number of ttys to allocate to this domain
+   -s   use a private devpts instance if possible, and restrict
+        ptys to this number; not implemented upstream
+   -n   append a network interface to this domain in addition
+        to any defined by the profile
+   -c   append cgroup subsystem values to this domain in
+        addition to any defined by the profile
+Arguments:
+   BASE       name of an existing template
+   PROFILE    an existing folder in include/mkdom
+   HOSTNAME   a valid hostname; default TARGET
+   TTY        positive integer; default 2
+   DEVPTS     positive integer; default 1024
+   TYPE       empty, veth, macvlan, or phys
+   FLAGS      up; or do not specify
+   LINK       an existing interface on the host
+   NAME       the interface name assigned internally
+              to the container
+   HWADDR     a valid MAC address; do not specify
+              for dynamic
+   IPV4       a valid IPV4 address in the form
+              x.y.z.t/m, eg. 192.168.1.123/24
+   IPV6       a valid IPV6 address in the form x::y/m,
+              eg. 2003:db8:1:0:214:1234:fe0b:3596/64
+   VALUE      set VALUE to the specified cgroup subsystem 
+              parameter, e.g devices.deny=a; if VALUE has
+              spaces, quotes are needed
+Parameters:
+   TARGET   the name of the domain to be created
+
+Options not defined can/may be set by the selected profile
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    local base profile hostname tty devpts network cgroup
+    case "${opt}" in
+    b)
+        base=$(vps_str_clean_tpl  "${optarg}")
+        [ -z "${base}" ] && \
+            vps_exception ${LINENO} fatal "template name is invalid" ${FUNCNAME}
+        ! [ -e ${VPS_TPL}/${base} ] && \
+            vps_exception ${LINENO} fatal "template ${base} does not exist" ${FUNCNAME}
+        VPS_MKDOM_BASE=${base}
+    ;;
+    p)
+        profile=$(vps_str_clean_profile  "${optarg}")
+        [ -z "${profile}" ] && \
+            vps_exception ${LINENO} fatal "profile name is invalid" ${FUNCNAME}
+        ! [ -d ${VPS_INC}/${profile} ] && \
+            vps_exception ${LINENO} fatal "profile (${profile}) is not defined" ${FUNCNAME}
+        VPS_MKDOM_PROFILE=${profile}
+    ;;
+    h)
+        hostname=$(echo "${optarg}" | sed -e "s,[^-_.0-9A-Za-z],,g")
+        [ -z "${hostname}" ] && \
+            vps_exception ${LINENO} fatal "hostname is not valid" ${FUNCNAME}
+        VPS_MKDOM_HOSTNAME=${hostname}
+    ;;
+    t)
+        tty=$(echo "${optarg}" | sed -e "s,[^0-9],,g")
+        [ -z "${tty}" ] && \
+            vps_exception ${LINENO} fatal "tty must be a positive integer" ${FUNCNAME}
+        VPS_MKDOM_TTY=${tty}
+    ;;
+    s)
+        devpts=$(echo "${optarg}" | sed -e "s,[^0-9],,g")
+        [ -z "${devpts}" ] && \
+            vps_exception ${LINENO} fatal "devpts must be a positive integer" ${FUNCNAME}
+        VPS_MKDOM_DEVPTS=${devpts}
+    ;;
+    n)
+        network=$(echo "${optarg}" | sed -e "s|[^-=_,.:/0-9A-Za-z]||g")
+        [ -z "${network}" ] && \
+            vps_exception ${LINENO} fatal "network definition is not valid" ${FUNCNAME}
+        vps_mkdom_network_validate || \
+            vps_exception ${LINENO} fatal "generic fail in network definition" ${FUNCNAME}
+        # if validation passes add to NETWORK
+        VPS_MKDOM_NETWORK=("${VPS_MKDOM_NETWORK[@]}" "${network}")
+        
+    ;;
+    c)
+        cgroup=$(echo "${optarg}" | sed -e "s|[^-=_,.:/0-9A-Za-z ]||g")
+        [ -z "${cgroup}" ] && \
+            vps_exception ${LINENO} fatal "cgroup definition is not valid" ${FUNCNAME}
+        vps_mkdom_cgroup_validate || \
+            vps_exception ${LINENO} fatal "generic fail in cgroup definition" ${FUNCNAME}
+        # if validation passes add to CGROUP
+        VPS_MKDOM_CGROUP=("${VPS_MKDOM_CGROUP[@]}" "${cgroup}")
+    ;;
+    :)
+        vps_exception ${LINENO} fatal "option -${optarg} requires an argument" ${FUNCNAME}
+    ;;
+    \?)
+        vps_exception ${LINENO} fatal "option -${optarg} is not valid" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local param=$(vps_str_clean_tpl  "${1}")
+    [ -z "${param}" ] && \
+    vps_exception ${LINENO} fatal "domain TARGET name is invalid" ${FUNCNAME}
+    [ -e "${VPS_DOM}/${param}" ] && \
+        vps_exception ${LINENO} fatal "domain TARGET ${param} already exists" ${FUNCNAME}
+    VPS_MKDOM_TARGET="${param}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    # source the prebuild include to possibly set up defaults for anything missing.
+    # this might not exist but a silent fail is fine.  we will assume that
+    # variables set by an include are good and dont need to be checked... :-/
+    # prebuild will need to check if a variable is already defined (i.e. defined
+    # via the command line or from config file) before overwriting.  this could
+    # be used to force certain variables on a per profile basis
+    . ${VPS_INC}/${VPS_MKDOM_PROFILE}/prebuild 2>&-
+    [ "$(type -t vps_mkdom_prebuild)" = "function" ] && vps_mkdom_prebuild
+
+    # verify all required variables
+    [ -z "${VPS_MKDOM_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "a valid TARGET domain name is required" ${FUNCNAME}
+    [ -z "${VPS_MKDOM_BASE}" ] && \
+        vps_exception ${LINENO} fatal "a valid BASE template is required" ${FUNCNAME}
+    [ -z "${VPS_MKDOM_PROFILE}" ] && \
+        vps_exception ${LINENO} fatal "profile is not defined" ${FUNCNAME}
+    [ -z "${VPS_MKDOM_HOSTNAME}" ] && \
+        VPS_MKDOM_HOSTNAME="${VPS_MKDOM_TARGET}"
+
+    # check again due to possible overwrites
+    # we use -e and not -d here due to btrfs
+    [ -e "${VPS_DOM}/${VPS_MKDOM_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "domain ${VPS_MKDOM_TARGET} already exists" ${FUNCNAME}
+    # verify a valid profile
+    ! [ -d ${VPS_INC}/${VPS_MKDOM_PROFILE} ] && \
+        vps_exception ${LINENO} fatal \
+            "profile ${VPS_MKDOM_PROFILE} does not exist" ${FUNCNAME}
+
+    # ensure the selected profile supports
+    ! [ -e "${VPS_INC}/${VPS_MKDOM_PROFILE}/build" ] && \
+    vps_exception ${LINENO} fatal "profile (${VPS_MKDOM_PROFILE}) does not support building" ${FUNCNAME}
+
+    # set up some new variables for use in (post)?main
+    VPS_MKDOM_ACTIVE_PROFILE=${VPS_INC}/${VPS_MKDOM_PROFILE}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    # if we make it this far, assume everything is ready to rock
+    # register our handler
+    vps_register_handle_fatal vps_mkdom_fatal
+    vps_exception ${LINENO} info \
+        "forking template (${VPS_MKDOM_BASE}) into domain (${VPS_MKDOM_TARGET}), please wait..." ${FUNCNAME}
+    vps_fs_method fork ${VPS_DOM}/${VPS_MKDOM_TARGET} ${VPS_TPL}/${VPS_MKDOM_BASE}
+    # start the build
+    cd ${VPS_DOM}/${VPS_MKDOM_TARGET}
+    . ${VPS_MKDOM_ACTIVE_PROFILE}/build
+    vps_mkdom_build || \
+        vps_exception ${LINENO} fatal "generic fail building domain" ${FUNCNAME}
+    ln -s ../../def/exec/sys/${VPS_MKDOM_TARGET}.conf config
+    ln -s ../../def/mnt/${VPS_MKDOM_TARGET}.conf fstab
+    cd ${VPS_PWD}
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    # add to the id file
+    cat <<EOF >> ${VPS_DOM}/${VPS_MKDOM_TARGET}/id
+# appended by ${VPS_COMMAND}
+# $(date)
+DOM_TARGET="${VPS_MKDOM_TARGET}"
+DOM_BASE="${VPS_MKDOM_BASE}"
+DOM_PROFILE="${VPS_MKDOM_PROFILE}"
+DOM_HOSTNAME="${VPS_MKDOM_HOSTNAME}"
+DOM_TTY="${VPS_MKDOM_TTY}"
+DOM_DEVPTS="${VPS_MKDOM_DEVPTS}"
+DOM_NETWORK=( $(for x in "${VPS_MKDOM_NETWORK[@]}"; do echo -n "\"${x}\" "; done))
+DOM_CGROUP=( $(for x in "${VPS_MKDOM_CGROUP[@]}"; do echo -n "\"${x}\" "; done))
+EOF
+
+    # run postbuild if it exists
+    . ${VPS_MKDOM_ACTIVE_PROFILE}/postbuild 2>&-
+    if [ "$(type -t vps_mkdom_postbuild)" = "function" ]; then
+        vps_mkdom_postbuild || \
+            vps_exception ${LINENO} fatal "generic fail in domain postbuild" ${FUNCNAME}
+    fi
+    # everything completed successfully, unregister fatal handler
+    vps_unregister_handle_fatal vps_mkdom_fatal
+    vps_exception ${LINENO} info "finished building domain ${VPS_MKDOM_TARGET}" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_mkdom_network_validate () {
+
+    local x o def key value fail=false skip=false
+    # this uses redirection/fds instead of a pipe to avoid
+    # a subshell, and thus problems with variable scope...
+    while read -d , x; do
+        key="$(expr "${x}" : "\([._0-9a-z]*\)=")"
+        value="$(expr "${x}" : "[._0-9a-z]*=\(.*\)")"
+        fail=false
+        skip=false
+        case "${key}" in
+            type)
+                expr "${value}" : "^empty\|veth\|macvlan\|phys\$" > /dev/null || fail=true
+            ;;
+            flags)
+                [ "${value}" = "up" ] || fail=true
+            ;;
+            link)
+                # we probably have to trust the user on this one :-/
+            ;;
+            name)
+                # same here, although there probably is some sanity checks we
+                # could implement later
+            ;;
+            hwaddr)
+                o="[0-6A-Fa-f]\{2\}"
+                expr "${value}" : "^${o}:${o}:${o}:${o}:${o}:${o}\$" > /dev/null || fail=true
+            ;;
+            ipv4)
+                o="[0-2]\{0,1\}[0-9]\{0,1\}[0-9]\{0,1\}"
+                expr "${value}" : "^${o}\.${o}\.${o}\.${o}/[1-3]\{0,1\}[0-9]\$" > /dev/null || fail=true
+            ;;
+            ipv6)
+                # i don't know how to do this one, send me a patch ;-)
+            ;;
+            "")
+                # this gets triggered on too many ,,, just skip it
+                skip=true
+            ;;
+            *)
+                vps_exception ${LINENO} fatal "${key} is not a valid key for option -n" ${FUNCNAME}
+            ;;
+        esac
+        ${fail} && vps_exception ${LINENO} fatal \
+                        "invalid value (${value}) for key (${key}) within option -n" ${FUNCNAME}
+        ${skip} || def="${def},${x}"
+    done < <(echo "${network},")
+
+    network=${def#,}
+
+    return 0
+
+}
+
+vps_mkdom_cgroup_validate () {
+
+    local key value
+    key="$(expr "${cgroup}" : "\([._0-9a-z]*\)=")"
+    value="$(expr "${cgroup}" : "[._0-9a-z]*=\(.*\)")"
+    case "${key}" in
+        "")
+            vps_exception ${LINENO} fatal "improper/missing key within option -c" ${FUNCNAME}
+        ;;
+        *)
+            # at this point the is no validation for cgroups
+        ;;
+    esac
+    cgroup="${cgroup}"
+
+    return 0
+
+}
+
+vps_mkdom_fatal () {
+
+    cd ${VPS_PWD}
+    vps_exception ${LINENO} info "removing failed domain, please wait..." ${FUNCNAME}
+    vps_fs_method del ${VPS_DOM}/${VPS_MKDOM_TARGET}
+    rm -f ${VPS_DEF}/{mnt,exec/sys}/${VPS_MKDOM_TARGET}.conf
+
+    return 0
+
+}
