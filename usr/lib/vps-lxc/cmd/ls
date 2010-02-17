@@ -5,6 +5,9 @@
 # COMMAND init
 vps_cmd_init () {
 
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/color ||
+        vps_exception ${LINENO} fatal "unable to source shared/color"
+
     # required variables
     VPS_COMMAND_OPTSTR=":"
 
@@ -65,7 +68,36 @@ vps_cmd_pre_main () {
 # COMMAND main
 vps_cmd_main () {
 
-    vps_exception ${LINENO} fatal "COMMAND not implemented" ${FUNCNAME}
+    local x
+    local dom="$(ls ${VPS_DOM})" lxc="$(ls ${VPS_LXC})"
+    local dom_created="$(comm -23 <(echo "${dom}" | tr " " "\n") <(echo "${lxc}" | tr " " "\n"))"
+    local dom_defined="$(comm -12 <(echo "${dom}" | tr " " "\n") <(echo "${lxc}" | tr " " "\n"))"
+    local dom_foreign="$(comm -13 <(echo "${dom}" | tr " " "\n") <(echo "${lxc}" | tr " " "\n"))"
+    local dom_maxchar="$(echo "${dom} ${lxc}" | tr " " "\n" | wc -L)"
+
+    for x in ${dom_created}; do vps_ls_dom_status ${x} ${dom_maxchar} created; done
+    for x in ${dom_defined}; do vps_ls_dom_status ${x} ${dom_maxchar} defined; done
+    for x in ${dom_foreign}; do vps_ls_dom_status ${x} ${dom_maxchar} foreign; done
+
+    ls -1 ${VPS_TPL} | 
+        sed -e "s|^[-a-zA-Z0-9_]*|${VPS_COLOR_INFO_PRI}tpl${VPS_COLOR_DEFAULT}   ${VPS_COLOR_INFO_SEC}\\0${VPS_COLOR_DEFAULT}|g"
+
+    return 0
+
+}
+
+vps_ls_dom_status () {
+
+    local xtra
+    [ -z "${3#created}" ] && xtra="N/A ${VPS_COLOR_INFO_TER}[undefined]"
+    [ -z "${3#defined}" ] && xtra="\\0"
+    [ -z "${3#foreign}" ] && xtra="\\0 ${VPS_COLOR_INFO_TER}[foreign]"
+    lxc-info -n ${1} | 
+        tr -d "'" |
+        awk '{printf "%-" ml "s   %s\n", $1, $3}' ml=${2} |
+        sed -e "s|^[-a-zA-Z0-9_]*|${VPS_COLOR_INFO_PRI}dom   ${VPS_COLOR_INFO_SEC}\\0${VPS_COLOR_DEFAULT}|g" \
+            -e "s|RUNNING|${VPS_COLOR_SUCCESS}${xtra}${VPS_COLOR_DEFAULT}|g" \
+            -e "s|STOPPED|${VPS_COLOR_FATAL}${xtra}${VPS_COLOR_DEFAULT}|g"
 
     return 0
 

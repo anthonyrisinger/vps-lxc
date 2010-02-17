@@ -21,6 +21,10 @@ VPS_COLOR_CYAN=$(vps_color_gen 36)
 VPS_COLOR_GRAY=$(vps_color_gen 37)
 
 # by purpose
-: ${VPS_COLOR_INFO:=${VPS_COLOR_GRAY}}
-: ${VPS_COLOR_WARN:=${VPS_COLOR_CYAN}}
-: ${VPS_COLOR_FATAL:=${VPS_COLOR_RED}}
+: ${VPS_COLOR_SEP:=$(vps_color_gen 1 34)}
+: ${VPS_COLOR_INFO_PRI:=$(vps_color_gen 1 37)}
+: ${VPS_COLOR_INFO_SEC:=$(vps_color_gen 1 33)}
+: ${VPS_COLOR_INFO_TER:=$(vps_color_gen 1 35)}
+: ${VPS_COLOR_SUCCESS:=$(vps_color_gen 1 32)}
+: ${VPS_COLOR_WARN:=$(vps_color_gen 1 36)}
+: ${VPS_COLOR_FATAL:=$(vps_color_gen 1 31)}
