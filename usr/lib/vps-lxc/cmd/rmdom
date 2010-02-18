@@ -84,6 +84,9 @@ vps_cmd_pre_main () {
         vps_exception ${LINENO} fatal "a valid TARGET is required" ${FUNCNAME}
     ! [ -e "${VPS_DOM}/${VPS_RMDOM_TARGET}" ] && \
         vps_exception ${LINENO} fatal "TARGET domain (${VPS_RMDOM_TARGET}) does not exist" ${FUNCNAME}
+    local state="$(lxc-info -n "${VPS_RMDOM_TARGET}" | sed -e 's/.* is //')"
+        [ "${state}" != "STOPPED" ] && \
+                vps_exception ${LINENO} fatal "cannot remove domain, current state is ${state}" ${FUNCNAME}
     [ "${VPS_RMDOM_KEEP}" = "true" ] || VPS_RMDOM_KEEP=false
 
     return 0
