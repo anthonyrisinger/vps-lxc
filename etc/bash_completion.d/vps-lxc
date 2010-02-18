@@ -3,6 +3,8 @@
 
 _vps-lxc () {
 
+    COMPREPLY=( )
+
     # source/find the configuration
     if [ -z "${VPS_CONF}" ]; then
         local x l=vps-lxc s=${l%-lxc}
@@ -10,44 +12,56 @@ _vps-lxc () {
         for x in {,/usr,/vps,/usr/local,/opt,/opt/local}/etc/{${l}/${l},${s}/${s}}.conf; do
             [ -f "${x}" ] && VPS_CONF=${x} && break
         done
-        [ -z "${VPS_CONF}" ] && return 1
+        [ -z "${VPS_CONF}" ] && return 0
     fi
-    ! . ${VPS_CONF} 2>&- && return 1
+    ! . ${VPS_CONF} 2>&- && return 0
 
-    local cur prev
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    local cur="${COMP_WORDS[COMP_CWORD]}" prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    local cmd run def dom tpl
-    cmd="$(ls -1 ${VPS_USR}/lib/${VPS_NAME}/cmd | sed -e "/[^a-z]/d")"
+    if [ ${COMP_CWORD} -eq 1 ]; then
+        # list help/commands and return
+        COMPREPLY=( $(compgen -W "help $(ls -1 ${VPS_USR}/lib/${VPS_NAME}/cmd | sed -e "/[^a-z]/d")" -- ${cur}) )
+        return 0
+    fi
+
+    # if last entry is help return now
+    [ "${prev#--}" = "help" ] && return 0
+
+    local list run def dom tpl subcmd="${COMP_WORDS[1]}"
     run="$(netstat -ax | grep -e "/command\$" | sed -e "s,.*LISTENING.*/\(.*\)/command\$,\\1,g")"
     def="$(ls ${VPS_LXC})"
     dom="$(ls ${VPS_VAR}/lib/${VPS_NAME}/dom)"
     tpl="$(ls ${VPS_VAR}/lib/${VPS_NAME}/tpl)"
 
-    case "${prev}" in
-    vps-lxc)
-        # self
-        COMPREPLY=( $(compgen -W "help ${cmd}" -- ${cur}) )
-        return 0
-    ;;
+    case "${subcmd}" in
     define)
+        [ ${COMP_CWORD} -gt 2 ] && return 0
         # not in lxc but in dom
-        COMPREPLY=( $(compgen -W "help $(comm -23 <(echo "${dom}" | tr " " "\n") <(echo "${def}" | tr " " "\n"))" -- ${cur}) )
+        list="$(comm -23 <(echo "${dom}" | tr " " "\n") <(echo "${def}" | tr " " "\n"))"
+        [ -z "${list}" ] && list=help
+        COMPREPLY=( $(compgen -W "${list}" -- ${cur}) )
         return 0
     ;;
     edit)
+        [ ${COMP_CWORD} -gt 2 ] && return 0
         # use dom
-        COMPREPLY=( $(compgen -W "help ${dom}" -- ${cur}) )
+        list="${dom}"
+        [ -z "${list}" ] && list=help
+        COMPREPLY=( $(compgen -W "${list}" -- ${cur}) )
         return 0
     ;;
     enter)
+        [ ${COMP_CWORD} -gt 2 ] && return 0
         # use run
-        COMPREPLY=( $(compgen -W "help ${run}" -- ${cur}) )
+        list="${run}"
+        [ -z "${list}" ] && list=help
+        COMPREPLY=( $(compgen -W "${list}" -- ${cur}) )
         return 0
     ;;
     ls)
-        COMPREPLY=( $(compgen -W "help dom tpl" -- ${cur}) )
+        [ ${COMP_CWORD} -gt 2 ] && return 0
+        # predefined
+        COMPREPLY=( $(compgen -W "dom tpl" -- ${cur}) )
         return 0
     ;;
     mkdom)
@@ -56,46 +70,88 @@ _vps-lxc () {
         return 0
     ;;
     mktpl)
-        # would like intelligent option completion here
-        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        [ "${cur#-}" != "${cur}" ] && COMPREPLY=( $(compgen -W "-b -d -a -p -m" -- ${cur}) ) && return 0
+        case "${prev}" in
+        -b)
+            list="${tpl}"
+        ;;
+        -d)
+            list="$(ls ${VPS_USR}/lib/${VPS_NAME}/include/mktpl)"
+        ;;
+        -a)
+            list="32 64"
+        ;;
+        -p)
+            # get distro name
+            local d x f=false
+            for x in "${COMP_WORDS[@]}"; do
+                ${f} && d="${x}" && break
+                [ "${x%-d}" != "${x}" ] && f=true
+            done
+            ${f} && list="$(ls -I${d} ${VPS_USR}/lib/${VPS_NAME}/include/mktpl/${d} 2> /dev/null)"
+        ;;
+        esac
+        [ -z "${list}" -a ${COMP_CWORD} -le 2 ] && list=help
+        COMPREPLY=( $(compgen -W "${list}" -- ${cur}) )
         return 0
     ;;
     monitor)
+        [ ${COMP_CWORD} -gt 2 ] && return 0
         # use run
-        COMPREPLY=( $(compgen -W "help ${run}" -- ${cur}) )
+        list="${run}"
+        [ -z "${list}" ] && list=help
+        COMPREPLY=( $(compgen -W "${list}" -- ${cur}) )
         return 0
     ;;
     reboot)
+        [ ${COMP_CWORD} -gt 2 ] && return 0
         # use run
-        COMPREPLY=( $(compgen -W "help ${run}" -- ${cur}) )
+        list="${run}"
+        [ -z "${list}" ] && list=help
+        COMPREPLY=( $(compgen -W "${list}" -- ${cur}) )
         return 0
     ;;
     rmdom)
+        [ "${cur#-}" != "${cur}" ] && COMPREPLY=( $(compgen -W "-k" -- ${cur}) ) && return 0
+        [ ${COMP_CWORD} -gt 3 ] && return 0
+        [ -z "${dom}" ] && COMPREPLY=( help ) && return 0
         # use dom
-        COMPREPLY=( $(compgen -W "help ${dom}" -- ${cur}) )
+        COMPREPLY=( $(compgen -W "${dom}" -- ${cur}) )
         return 0
     ;;
     rmtpl)
+        [ ${COMP_CWORD} -gt 2 ] && return 0
         # use tpl
-        COMPREPLY=( $(compgen -W "help ${tpl}" -- ${cur}) )
+        list="${tpl}"
+        [ -z "${list}" ] && list=help
+        COMPREPLY=( $(compgen -W "${list}" -- ${cur}) )
         return 0
     ;;
     start)
+        [ ${COMP_CWORD} -gt 2 ] && return 0
         # def against run unique
-        COMPREPLY=( $(compgen -W "help $(comm -23 <(echo "${def}" | tr " " "\n") <(echo "${run}" | tr " " "\n"))" -- ${cur}) )
+        list="$(comm -23 <(echo "${def}" | tr " " "\n") <(echo "${run}" | tr " " "\n"))"
+        [ -z "${list}" ] && list=help
+        COMPREPLY=( $(compgen -W "${list}" -- ${cur}) )
         return 0
     ;;
     stop)
-        # run against def unique
-        COMPREPLY=( $(compgen -W "help ${run}" -- ${cur}) )
+        [ ${COMP_CWORD} -gt 2 ] && return 0
+        # use run
+        list="${run}"
+        [ -z "${list}" ] && list=help
+        COMPREPLY=( $(compgen -W "${list}" -- ${cur}) )
         return 0
     ;;
     tree)
+        [ ${COMP_CWORD} -gt 2 ] && return 0
         # none
         COMPREPLY=( $(compgen -W "help" -- ${cur}) )
         return 0
     ;;
     proto)
+        [ ${COMP_CWORD} -gt 2 ] && return 0
+        # none
         COMPREPLY=( $(compgen -W "help" -- ${cur}) )
         return 0
     ;;
