@@ -3,25 +3,37 @@
 
 _vps-lxc () {
 
+    # source/find the configuration
+    if [ -z "${VPS_CONF}" ]; then
+        local x l=vps-lxc s=${l%-lxc}
+        # this will break immediately on the first/best hit
+        for x in {,/usr,/vps,/usr/local,/opt,/opt/local}/etc/{${l}/${l},${s}/${s}}.conf; do
+            [ -f "${x}" ] && VPS_CONF=${x} && break
+        done
+        [ -z "${VPS_CONF}" ] && return 1
+    fi
+    ! . ${VPS_CONF} 2>&- && return 1
+
     local cur prev
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    local command running dom tpl
-    command="$(ls -1 /vps/usr/lib/vps-lxc/cmd | sed -e "/[^a-z]/d")"
-    running="$(netstat -ax | grep -e "/command\$" | sed -e "s,.*LISTENING.*/\(.*\)/command\$,\\1,g")"
-    dom="$(ls /vps/var/lib/vps-lxc/dom)"
-    tpl="$(ls /vps/var/lib/vps-lxc/tpl)"
+    local cmd run def dom tpl
+    cmd="$(ls -1 ${VPS_USR}/lib/${VPS_NAME}/cmd | sed -e "/[^a-z]/d")"
+    run="$(netstat -ax | grep -e "/command\$" | sed -e "s,.*LISTENING.*/\(.*\)/command\$,\\1,g")"
+    def="$(ls ${VPS_LXC})"
+    dom="$(ls ${VPS_VAR}/lib/${VPS_NAME}/dom)"
+    tpl="$(ls ${VPS_VAR}/lib/${VPS_NAME}/tpl)"
 
     case "${prev}" in
     vps-lxc)
         # self
-        COMPREPLY=( $(compgen -W "help ${command}" -- ${cur}) )
+        COMPREPLY=( $(compgen -W "help ${cmd}" -- ${cur}) )
         return 0
     ;;
     define)
         # not in lxc but in dom
-        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        COMPREPLY=( $(compgen -W "help $(comm -23 <(echo "${dom}" | tr " " "\n") <(echo "${def}" | tr " " "\n"))" -- ${cur}) )
         return 0
     ;;
     edit)
@@ -30,8 +42,8 @@ _vps-lxc () {
         return 0
     ;;
     enter)
-        # use running
-        COMPREPLY=( $(compgen -W "help ${running}" -- ${cur}) )
+        # use run
+        COMPREPLY=( $(compgen -W "help ${run}" -- ${cur}) )
         return 0
     ;;
     ls)
@@ -49,13 +61,13 @@ _vps-lxc () {
         return 0
     ;;
     monitor)
-        # use running
-        COMPREPLY=( $(compgen -W "help ${running}" -- ${cur}) )
+        # use run
+        COMPREPLY=( $(compgen -W "help ${run}" -- ${cur}) )
         return 0
     ;;
     reboot)
-        # use running
-        COMPREPLY=( $(compgen -W "help ${running}" -- ${cur}) )
+        # use run
+        COMPREPLY=( $(compgen -W "help ${run}" -- ${cur}) )
         return 0
     ;;
     rmdom)
@@ -69,13 +81,13 @@ _vps-lxc () {
         return 0
     ;;
     start)
-        # dom against running
-        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        # def against run unique
+        COMPREPLY=( $(compgen -W "help $(comm -23 <(echo "${def}" | tr " " "\n") <(echo "${run}" | tr " " "\n"))" -- ${cur}) )
         return 0
     ;;
     stop)
-        # running against dom
-        COMPREPLY=( $(compgen -W "help" -- ${cur}) )
+        # run against def unique
+        COMPREPLY=( $(compgen -W "help ${run}" -- ${cur}) )
         return 0
     ;;
     tree)
