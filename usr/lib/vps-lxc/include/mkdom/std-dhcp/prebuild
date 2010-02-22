@@ -1,0 +1,9 @@
+#!/bin/bash
+
+vps_mkdom_prebuild () {
+
+    VPS_MKDOM_NETWORK=("type=veth,flags=up,link=dhcpbr0,name=eth0,mtu=1500" "${VPS_MKDOM_NETWORK[@]}")
+
+    return 0
+
+}
