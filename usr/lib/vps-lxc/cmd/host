@@ -1,0 +1,156 @@
+#!/bin/bash
+#
+# COMMAND host
+# control ancillary configuration and services
+
+# COMMAND init
+vps_cmd_init () {
+
+    # includes
+    . ${VPS_USR}/lib/${VPS_NAME}/shared/str || \
+        vps_exception ${LINENO} fatal "unable to source shared/str"
+
+    # required variables
+    VPS_COMMAND_OPTSTR=":p:s:"
+
+    # COMMAND OPTSTRING/PARAM derived variables
+    # TARGET
+    : ${VPS_HOST_TARGET:=}
+    # -p PROFILE
+    : ${VPS_HOST_PROFILE:=default}
+    # -s SKIP
+    : ${VPS_HOST_SKIP:=}
+
+    return 0
+
+}
+
+# COMMAND usage
+vps_cmd_usage () {
+
+    cat <<EOF
+Usage: ${VPS_SELF} ${VPS_COMMAND} [-p PROFILE] [-s SKIP] <up|down>
+Setup and teardown ancillary configuration and services on the host
+EOF
+
+    # show extended usage on help
+    [ "${1}" = "help" ] || return 0
+
+    cat <<EOF
+
+Options:
+   -p   the profile to use; default if not provided
+   -s   skip these targets if defined by the selected profile
+Arguments:
+   PROFILE   an existing folder in include/host
+   SKIP      a comma separated list of targets to skip, originally
+             defined by the selected profile
+Parameters:
+   up     setup the selected profile
+   down   teardown the selected profile
+EOF
+
+    return 0
+
+}
+
+# COMMAND opts processor
+vps_cmd_opt () {
+
+    local opt="${1}" optind="${2}" optarg="${3}"
+    local profile skip
+    case "${opt}" in
+    p)
+        profile=$(vps_str_clean_profile  "${optarg}")
+        [ -z "${profile}" ] &&
+            vps_exception ${LINENO} fatal "profile name is invalid" ${FUNCNAME}
+        ! [ -d ${VPS_INC}/${profile} ] &&
+            vps_exception ${LINENO} fatal "profile (${profile}) is not defined" ${FUNCNAME}
+        VPS_HOST_PROFILE=${profile}
+    ;;
+    s)
+        skip=$(echo "${optarg}" | sed -e "s,[^,a-z],,g")
+        [ -z "${skip}" ] &&
+            vps_exception ${LINENO} fatal "skip is a comma separated list" ${FUNCNAME}
+        VPS_HOST_SKIP=${skip}
+    ;;
+    :)
+        vps_exception ${LINENO} fatal "option -${optarg} requires an argument" ${FUNCNAME}
+    ;;
+    \?)
+        vps_exception ${LINENO} fatal "option -${optarg} is not valid" ${FUNCNAME}
+    ;;
+    esac
+
+    return 0
+
+}
+
+vps_cmd_param () {
+
+    # for this COMMAND there is only one param
+    local target=false
+    [ "${1}" = "up" ] && target=true
+    [ "${1}" = "down" ] && target=true
+    ${target} || vps_exception ${LINENO} fatal "choose up/down to setup/teardown" ${FUNCNAME}
+    VPS_HOST_TARGET="${1}"
+
+    return 0
+
+}
+
+# COMMAND's last chance to bail out before main
+vps_cmd_pre_main () {
+
+    local rundir=${VPS_VAR}/run/${VPS_NAME}/cmd/${VPS_COMMAND}
+    # verify required variables
+    [ -z "${VPS_HOST_TARGET}" ] && \
+        vps_exception ${LINENO} fatal "choose up/down to setup/teardown" ${FUNCNAME}
+    [ -z "${VPS_HOST_PROFILE}" ] && \
+        vps_exception ${LINENO} fatal "profile is not defined" ${FUNCNAME}
+
+    [ "${VPS_HOST_TARGET}" = "up" ] && grep -q "^${VPS_HOST_PROFILE}\$" ${rundir}/active_profiles 2> /dev/null &&
+        vps_exception ${LINENO} fatal "profile (${VPS_HOST_PROFILE}) is already active" ${FUNCNAME}
+    [ "${VPS_HOST_TARGET}" = "down" ] && ! grep -q "^${VPS_HOST_PROFILE}\$" ${rundir}/active_profiles 2> /dev/null &&
+        vps_exception ${LINENO} fatal "profile (${VPS_HOST_PROFILE}) is not active" ${FUNCNAME}
+
+    # verify a valid profile
+    ! [ -d ${VPS_INC}/${VPS_HOST_PROFILE} ] &&
+        vps_exception ${LINENO} fatal "profile (${VPS_HOST_PROFILE}) does not exist" ${FUNCNAME}
+
+    # source the profile controller
+    . ${VPS_INC}/${VPS_HOST_PROFILE}/controller 2>&-
+    [ "$(type -t vps_host_controller)" = "function" ] ||
+        vps_exception ${LINENO} fatal "profile (${VPS_HOST_PROFILE}) missing controller" ${FUNCNAME}
+
+    # set up some new variables for use in (post)?main
+    VPS_HOST_ACTIVE_PROFILE=${VPS_INC}/${VPS_HOST_PROFILE}
+
+    return 0
+
+}
+
+# COMMAND main
+vps_cmd_main () {
+
+    # if we make it this far, assume everything is ready to rock
+    vps_exception ${LINENO} info "launching controller for profile (${VPS_HOST_PROFILE})" ${FUNCNAME}
+    vps_host_controller ${VPS_HOST_TARGET} || 
+        vps_exception ${LINENO} fatal "generic fail in profile (${VPS_HOST_PROFILE}) controller" ${FUNCNAME}
+    vps_exception ${LINENO} info "completed controller for profile (${VPS_HOST_PROFILE})" ${FUNCNAME}
+
+    return 0
+
+}
+
+vps_cmd_post_main () {
+
+    # append/remove to/from list of active host profiles
+    local rundir=${VPS_VAR}/run/${VPS_NAME}/cmd/${VPS_COMMAND}
+    mkdir -p ${rundir}
+    [ "${VPS_HOST_TARGET}" = "up" ] && echo "${VPS_HOST_PROFILE}" >> ${rundir}/active_profiles
+    [ "${VPS_HOST_TARGET}" = "down" ] && sed -i ${rundir}/active_profiles -e "/^${VPS_HOST_PROFILE}\$/d"
+
+    return 0
+
+}
