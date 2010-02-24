@@ -136,13 +136,17 @@ trap 'vps_exception ${LINENO} fatal "caught SIGTERM"' TERM
 trap 'vps_exception ${LINENO} fatal "caught SIGINT"' INT
 trap vps_handle_exit EXIT
 
-# set self and source configuration
+# self
 VPS_SELF="$(basename ${0})"
+
+# simplest usage case
+[ -z "${1}" ] && { vps_usage; exit 0; }
+
+# source config
 vps_config
 
 # set up standard variables
 VPS_PWD="$(pwd)"
-VPS_TMP="$(mktemp -d)"
 VPS_FATAL=(vps_handle_fatal)
 VPS_STACK=()
 
@@ -151,9 +155,6 @@ VPS_DEF=${VPS_VAR}/lib/${VPS_NAME}/def
 VPS_DOM=${VPS_VAR}/lib/${VPS_NAME}/dom
 VPS_TPL=${VPS_VAR}/lib/${VPS_NAME}/tpl
 VPS_LOG=${VPS_VAR}/log/${VPS_NAME}
-
-# simplest usage case
-[ -z "${1}" ] && { vps_usage; exit 0; }
 
 # possible usage strings
 VPS_USAGE="usage"
@@ -185,8 +186,9 @@ fi
 # remove COMMAND from the argument list
 shift
 
-# create INCLUDE variable
+# create INCLUDE and TMP variable
 VPS_INC=${VPS_USR}/lib/${VPS_NAME}/include/${VPS_COMMAND}
+VPS_TMP="$(mktemp -d)"
 
 # source the COMMAND
 ! . ${VPS_USR}/lib/${VPS_NAME}/cmd/${VPS_COMMAND} && \
