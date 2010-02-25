@@ -75,12 +75,15 @@ vps_cmd_main () {
     local dom_foreign="$(comm -13 <(echo "${dom}" | tr " " "\n") <(echo "${lxc}" | tr " " "\n"))"
     local dom_maxchar="$(echo "${dom} ${lxc}" | tr " " "\n" | wc -L)"
 
-    for x in ${dom_created}; do vps_ls_dom_status ${x} ${dom_maxchar} created; done
-    for x in ${dom_defined}; do vps_ls_dom_status ${x} ${dom_maxchar} defined; done
-    for x in ${dom_foreign}; do vps_ls_dom_status ${x} ${dom_maxchar} foreign; done
-
-    ls -1 ${VPS_TPL} | 
-        sed -e "s|^[-a-zA-Z0-9_]*|${VPS_COLOR_INFO_PRI}tpl${VPS_COLOR_DEFAULT}   ${VPS_COLOR_INFO_SEC}\\0${VPS_COLOR_DEFAULT}|g"
+    if [ -z "${VPS_LS_TARGET}" ] || [ "${VPS_LS_TARGET}" = "dom" ]; then
+        for x in ${dom_created}; do vps_ls_dom_status ${x} ${dom_maxchar} created; done
+        for x in ${dom_defined}; do vps_ls_dom_status ${x} ${dom_maxchar} defined; done
+        for x in ${dom_foreign}; do vps_ls_dom_status ${x} ${dom_maxchar} foreign; done
+    fi
+    if [ -z "${VPS_LS_TARGET}" ] || [ "${VPS_LS_TARGET}" = "tpl" ]; then
+        ls -1 ${VPS_TPL} | 
+            sed -e "s|^[-a-zA-Z0-9_]*|${VPS_COLOR_INFO_PRI}tpl${VPS_COLOR_DEFAULT}   ${VPS_COLOR_INFO_SEC}\\0${VPS_COLOR_DEFAULT}|g"
+    fi
 
     return 0
 
