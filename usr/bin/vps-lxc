@@ -131,104 +131,112 @@ vps_exception () {
 
 }
 
-# set up traps
-trap 'vps_exception ${LINENO} fatal "caught SIGTERM"' TERM
-trap 'vps_exception ${LINENO} fatal "caught SIGINT"' INT
-trap vps_handle_exit EXIT
+# main
+vps_main () {
 
-# self
-VPS_SELF="$(basename ${0})"
+    # set up traps
+    trap 'vps_exception ${LINENO} fatal "caught SIGTERM"' TERM
+    trap 'vps_exception ${LINENO} fatal "caught SIGINT"' INT
+    trap vps_handle_exit EXIT
+    
+    # self
+    VPS_SELF="$(basename ${0})"
+    
+    # simplest usage case
+    [ -z "${1}" ] && { vps_usage; exit 0; }
+    
+    # source config
+    vps_config
+    
+    # set up standard variables
+    VPS_PWD="$(pwd)"
+    VPS_FATAL=(vps_handle_fatal)
+    VPS_STACK=()
+    
+    # set up convenience variables
+    VPS_DEF=${VPS_VAR}/lib/${VPS_NAME}/def
+    VPS_DOM=${VPS_VAR}/lib/${VPS_NAME}/dom
+    VPS_TPL=${VPS_VAR}/lib/${VPS_NAME}/tpl
+    VPS_LOG=${VPS_VAR}/log/${VPS_NAME}
+    
+    # possible usage strings
+    VPS_USAGE="usage"
+    VPS_HELP="help"
+    
+    # check for usage invocation
+    vps_check_usage "${1}"
+    
+    # source the primary init
+    # this should set HAS/USE flags and defaults
+    ! . ${VPS_USR}/lib/${VPS_NAME}/init && \
+        vps_exception ${LINENO} fatal "unable to source ${VPS_NAME}/init"
+    vps_init || \
+        vps_exception ${LINENO} fatal "generic fail in primary init"
+    
+    # COMMAND list
+    VPS_COMMAND_LIST="$(ls -1 ${VPS_USR}/lib/${VPS_NAME}/cmd | sed -e "/[^a-z]/d")"
+    
+    # need a valid COMMAND to continue
+    VPS_COMMAND="$(echo "${VPS_COMMAND_LIST}" | tr " " "\n" | grep "^${1}\$")"
+    [ -z "${VPS_COMMAND}" ] && \
+        vps_exception ${LINENO} fatal "${1} is not a recognized COMMAND, try \"${VPS_SELF} help\""
+    
+    # escalate privileges if COMMAND is valid
+    if [ -n "${VPS_SUDO}" ] && [ -n "${VPS_USER#$(whoami)}" ]; then
+        exec ${VPS_SUDO} ${0} "$@"
+    fi
+    
+    # remove COMMAND from the argument list
+    shift
+    
+    # create INCLUDE and TMP variable
+    VPS_INC=${VPS_USR}/lib/${VPS_NAME}/include/${VPS_COMMAND}
+    VPS_TMP="$(mktemp -d)"
+    
+    # source the COMMAND
+    ! . ${VPS_USR}/lib/${VPS_NAME}/cmd/${VPS_COMMAND} && \
+        vps_exception ${LINENO} fatal "unable to source COMMAND (${VPS_COMMAND})"
+    
+    # check for COMMAND usage invocation
+    vps_check_usage "${1}"
+    
+    # init COMMAND
+    vps_cmd_init || \
+        vps_exception ${LINENO} fatal "generic fail in COMMAND init"
+    
+    # sanity
+    [ -z "${VPS_COMMAND_OPTSTR}" ] && \
+        vps_exception ${LINENO} fatal "COMMAND ${VPS_COMMAND} does not implement an OPTSTRING"
+    
+    # send each opt to the COMMAND handler
+    while getopts "${VPS_COMMAND_OPTSTR}" OPT; do
+        vps_cmd_opt "${OPT}" "${OPTIND}" "${OPTARG}"
+    done
+    
+    # remove the processed options
+    shift $((OPTIND-1));
+    
+    # send each param to the COMMAND handler
+    for PARAM in "${@}"; do
+        vps_cmd_param "${PARAM}"
+    done
+    
+    # last chance for COMMAND to bail before main
+    vps_cmd_pre_main || \
+        vps_exception ${LINENO} fatal "generic fail in COMMAND pre_main"
+    
+    # run the COMMAND main
+    vps_cmd_main || \
+        vps_exception ${LINENO} fatal "generic fail in COMMAND main"
+    
+    # COMMAND cleanup, finalization, etc.
+    vps_cmd_post_main || \
+        vps_exception ${LINENO} fatal "generic fail in COMMAND post_main"
+    
+    # we explicitly add this to trip the EXIT handler
+    exit 0
 
-# simplest usage case
-[ -z "${1}" ] && { vps_usage; exit 0; }
+}
 
-# source config
-vps_config
-
-# set up standard variables
-VPS_PWD="$(pwd)"
-VPS_FATAL=(vps_handle_fatal)
-VPS_STACK=()
-
-# set up convenience variables
-VPS_DEF=${VPS_VAR}/lib/${VPS_NAME}/def
-VPS_DOM=${VPS_VAR}/lib/${VPS_NAME}/dom
-VPS_TPL=${VPS_VAR}/lib/${VPS_NAME}/tpl
-VPS_LOG=${VPS_VAR}/log/${VPS_NAME}
-
-# possible usage strings
-VPS_USAGE="usage"
-VPS_HELP="help"
-
-# check for usage invocation
-vps_check_usage "${1}"
-
-# source the primary init
-# this should set HAS/USE flags and defaults
-! . ${VPS_USR}/lib/${VPS_NAME}/init && \
-    vps_exception ${LINENO} fatal "unable to source ${VPS_NAME}/init"
-vps_init || \
-    vps_exception ${LINENO} fatal "generic fail in primary init"
-
-# COMMAND list
-VPS_COMMAND_LIST="$(ls -1 ${VPS_USR}/lib/${VPS_NAME}/cmd | sed -e "/[^a-z]/d")"
-
-# need a valid COMMAND to continue
-VPS_COMMAND="$(echo "${VPS_COMMAND_LIST}" | tr " " "\n" | grep "^${1}\$")"
-[ -z "${VPS_COMMAND}" ] && \
-    vps_exception ${LINENO} fatal "${1} is not a recognized COMMAND, try \"${VPS_SELF} help\""
-
-# escalate privileges if COMMAND is valid
-if [ -n "${VPS_SUDO}" ] && [ -n "${VPS_USER#$(whoami)}" ]; then
-    exec ${VPS_SUDO} ${0} "$@"
-fi
-
-# remove COMMAND from the argument list
-shift
-
-# create INCLUDE and TMP variable
-VPS_INC=${VPS_USR}/lib/${VPS_NAME}/include/${VPS_COMMAND}
-VPS_TMP="$(mktemp -d)"
-
-# source the COMMAND
-! . ${VPS_USR}/lib/${VPS_NAME}/cmd/${VPS_COMMAND} && \
-    vps_exception ${LINENO} fatal "unable to source COMMAND (${VPS_COMMAND})"
-
-# check for COMMAND usage invocation
-vps_check_usage "${1}"
-
-# init COMMAND
-vps_cmd_init || \
-    vps_exception ${LINENO} fatal "generic fail in COMMAND init"
-
-# sanity
-[ -z "${VPS_COMMAND_OPTSTR}" ] && \
-    vps_exception ${LINENO} fatal "COMMAND ${VPS_COMMAND} does not implement an OPTSTRING"
-
-# send each opt to the COMMAND handler
-while getopts "${VPS_COMMAND_OPTSTR}" OPT; do
-    vps_cmd_opt "${OPT}" "${OPTIND}" "${OPTARG}"
-done
-
-# remove the processed options
-shift $((OPTIND-1));
-
-# send each param to the COMMAND handler
-for PARAM in "${@}"; do
-    vps_cmd_param "${PARAM}"
-done
-
-# last chance for COMMAND to bail before main
-vps_cmd_pre_main || \
-    vps_exception ${LINENO} fatal "generic fail in COMMAND pre_main"
-
-# run the COMMAND main
-vps_cmd_main || \
-    vps_exception ${LINENO} fatal "generic fail in COMMAND main"
-
-# COMMAND cleanup, finalization, etc.
-vps_cmd_post_main || \
-    vps_exception ${LINENO} fatal "generic fail in COMMAND post_main"
-
-# we explicitly add this to trip the EXIT handler
-exit 0
+# init main
+vps_main "${@}"
