@@ -30,13 +30,13 @@ vps_cmd_usage () {
 
     cat <<EOF
 Usage: ${VPS_SELF} ${VPS_COMMAND} -a OPTIONA -b OPTIONB -c OPTIONC PARAM
-This is a prototype command used as the basis for other commands
 EOF
 
     # show extended usage on help
-    [ "${1}" = "help" ] || return 0
+    [ "${1}" = "${VPS_HELP}" ] || return 0
 
     cat <<EOF
+This is a prototype command used as the basis for other commands
 
 Options:
    -a   explanation of option a

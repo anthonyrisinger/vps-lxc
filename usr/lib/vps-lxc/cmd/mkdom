@@ -52,14 +52,14 @@ vps_cmd_usage () {
 Usage: ${VPS_SELF} ${VPS_COMMAND} -b BASE [-p PROFILE] [-h HOSTNAME] [-t TTY] [-s DEVPTS]
        [-n type=TYPE,flags=FLAGS,link=LINK,name=NAME,hwaddr=HWADDR,ipv4=IPV4,ipv6=IPV6]...
        [-c subsys.param=VALUE]... TARGET
-Generate a VPS domain using an existing template as a base.  The resultant domain
-configuration is altered according to the selected profile and any options passed
 EOF
 
     # show extended usage on help
-    [ "${1}" = "help" ] || return 0
+    [ "${1}" = "${VPS_HELP}" ] || return 0
 
     cat <<EOF
+Generate a VPS domain using an existing template as a base.  The resultant domain
+configuration is altered according to the selected profile and any options passed
 
 Options:
    -b   specifies the template used as a base for this domain

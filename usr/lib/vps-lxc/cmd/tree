@@ -18,6 +18,12 @@ vps_cmd_usage () {
 
     cat <<EOF
 Usage: ${VPS_SELF} ${VPS_COMMAND}
+EOF
+
+    # show extended usage on help
+    [ "${1}" = "${VPS_HELP}" ] || return 0
+
+    cat <<EOF
 View all VPS directories and files in a tree structure
 EOF
 

@@ -39,14 +39,14 @@ vps_cmd_usage () {
     cat <<EOF
 Usage: ${VPS_SELF} ${VPS_COMMAND} (-b BASE | -d DISTRO -a ARCH)
        [-p PROFILE] [-m MIRROR] TARGET
-Generate a VPS template using bootstrap utilities to build it from scratch, or
-base it off an existing template and add/modify packages/configuration
 EOF
 
     # show extended usage on help
-    [ "${1}" = "help" ] || return 0
+    [ "${1}" = "${VPS_HELP}" ] || return 0
 
     cat <<EOF
+Generate a VPS template using bootstrap utilities to build it from scratch, or
+base it off an existing template and add/modify packages/configuration
 
 Options:
    -b   specifies the template used as a base for this one;

@@ -24,6 +24,12 @@ vps_cmd_usage () {
 
     cat <<EOF
 Usage: ${VPS_SELF} ${VPS_COMMAND} <dom|tpl>
+EOF
+
+    # show extended usage on help
+    [ "${1}" = "${VPS_HELP}" ] || return 0
+
+    cat <<EOF
 List each domains and/or templates and their status
 EOF
 

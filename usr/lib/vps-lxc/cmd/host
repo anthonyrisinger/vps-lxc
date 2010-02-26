@@ -30,13 +30,13 @@ vps_cmd_usage () {
 
     cat <<EOF
 Usage: ${VPS_SELF} ${VPS_COMMAND} [-p PROFILE] [-s SKIP] <up|down>
-Setup and teardown ancillary configuration and services on the host
 EOF
 
     # show extended usage on help
-    [ "${1}" = "help" ] || return 0
+    [ "${1}" = "${VPS_HELP}" ] || return 0
 
     cat <<EOF
+Setup and teardown ancillary configuration and services on the host
 
 Options:
    -p   the profile to use; default if not provided
