@@ -1,0 +1,26 @@
+#!/bin/bash
+
+vps_host_controller_reset_target () {
+
+    unset vps_host_target
+
+    return 0
+
+}
+
+vps_host_controller () {
+
+    local target
+    
+    for target in mount-cgroup; do
+        vps_exception ${LINENO} info "changing target (${target}) state (${1})" ${FUNCNAME}
+        . ${VPS_HOST_ACTIVE_TARGET}/${target}
+        [ "$(type -t vps_host_target)" = "function" ] ||
+            vps_exception ${LINENO} fatal "target (${x}) missing definition" ${FUNCNAME}
+        vps_host_target "${1}"
+        vps_host_controller_reset_target
+    done
+
+    return 0
+
+}

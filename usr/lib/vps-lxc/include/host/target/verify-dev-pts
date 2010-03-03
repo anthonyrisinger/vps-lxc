@@ -1,0 +1,22 @@
+#!/bin/bash
+
+vps_host_target () {
+
+    # make sure /dev/pts is set up properly
+    if zgrep -q "CONFIG_DEVPTS_MULTIPLE_INSTANCES=y" /proc/config.gz; then
+        if [ -e /dev/pts/ptmx ]; then
+            if ! [ -L /dev/ptmx ]; then
+                rm -f /dev/ptmx
+                ln -s pts/ptmx /dev/ptmx
+            fi
+        else
+            if mount -o remount,defaults,newinstance /dev/pts; then
+                rm -f /dev/ptmx
+                ln -s pts/ptmx /dev/ptmx
+            fi
+        fi
+    fi
+
+    return 0
+
+}

@@ -1,0 +1,15 @@
+#!/bin/bash
+
+vps_host_target () {
+
+    if [ "${1}" = "up" ]; then
+        brctl addbr dhcpbr0
+        brctl setfd dhcpbr0 0
+        ifconfig dhcpbr0 10.0.10.1 netmask 255.255.255.0 broadcast 10.0.10.255 up
+    elif [ "${1}" = "down" ]; then
+        ifconfig dhcpbr0 down
+        brctl delbr dhcpbr0
+        { brctl show | grep -q "^dhcpbr0"; }
+    fi
+
+}

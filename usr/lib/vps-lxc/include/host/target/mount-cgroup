@@ -1,0 +1,18 @@
+#!/bin/bash
+
+vps_host_target () {
+
+    if [ "${1}" = "up" ]; then
+        [ -d "${VPS_DEV}/${VPS_NAME}" ] || mkdir -p ${VPS_DEV}/${VPS_NAME}
+        mount -t cgroup -o defaults lxc ${VPS_DEV}/${VPS_NAME} ||
+            vps_exception ${LINENO} fatal "unable to mount cgroup filesystem to ${VPS_DEV}/${VPS_NAME}" ${FUNCNAME}
+        vps_exception ${LINENO} info "mounted cgroup filesystem at ${VPS_DEV}/${VPS_NAME}" ${FUNCNAME}
+    elif [ "${1}" = "down" ]; then
+        umount ${VPS_DEV}/${VPS_NAME} ||
+            vps_exception ${LINENO} fatal "unable to umount cgroup filesystem from ${VPS_DEV}/${VPS_NAME}" ${FUNCNAME}
+        vps_exception ${LINENO} info "umounted cgroup filesystem from ${VPS_DEV}/${VPS_NAME}" ${FUNCNAME}
+    fi
+
+    return 0
+
+}

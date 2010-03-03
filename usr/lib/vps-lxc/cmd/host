@@ -64,7 +64,7 @@ vps_cmd_opt () {
         profile=$(vps_str_clean_profile  "${optarg}")
         [ -z "${profile}" ] &&
             vps_exception ${LINENO} fatal "profile name is invalid" ${FUNCNAME}
-        ! [ -d ${VPS_INC}/${profile} ] &&
+        ! [ -d ${VPS_INC}/profile/${profile} ] &&
             vps_exception ${LINENO} fatal "profile (${profile}) is not defined" ${FUNCNAME}
         VPS_HOST_PROFILE=${profile}
     ;;
@@ -115,16 +115,17 @@ vps_cmd_pre_main () {
         vps_exception ${LINENO} fatal "profile (${VPS_HOST_PROFILE}) is not active" ${FUNCNAME}
 
     # verify a valid profile
-    ! [ -d ${VPS_INC}/${VPS_HOST_PROFILE} ] &&
+    ! [ -d ${VPS_INC}/profile/${VPS_HOST_PROFILE} ] &&
         vps_exception ${LINENO} fatal "profile (${VPS_HOST_PROFILE}) does not exist" ${FUNCNAME}
 
     # source the profile controller
-    . ${VPS_INC}/${VPS_HOST_PROFILE}/controller 2>&-
+    . ${VPS_INC}/profile/${VPS_HOST_PROFILE}/controller 2>&-
     [ "$(type -t vps_host_controller)" = "function" ] ||
         vps_exception ${LINENO} fatal "profile (${VPS_HOST_PROFILE}) missing controller" ${FUNCNAME}
 
     # set up some new variables for use in (post)?main
-    VPS_HOST_ACTIVE_PROFILE=${VPS_INC}/${VPS_HOST_PROFILE}
+    VPS_HOST_ACTIVE_PROFILE=${VPS_INC}/profile/${VPS_HOST_PROFILE}
+    VPS_HOST_ACTIVE_TARGET=${VPS_INC}/target
 
     return 0
 
@@ -134,10 +135,8 @@ vps_cmd_pre_main () {
 vps_cmd_main () {
 
     # if we make it this far, assume everything is ready to rock
-    vps_exception ${LINENO} info "launching controller for profile (${VPS_HOST_PROFILE})" ${FUNCNAME}
-    vps_host_controller ${VPS_HOST_TARGET} || 
+    vps_host_controller "${VPS_HOST_TARGET}" || 
         vps_exception ${LINENO} fatal "generic fail in profile (${VPS_HOST_PROFILE}) controller" ${FUNCNAME}
-    vps_exception ${LINENO} info "completed controller for profile (${VPS_HOST_PROFILE})" ${FUNCNAME}
 
     return 0
 
