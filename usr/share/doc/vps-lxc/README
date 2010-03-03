@@ -1,0 +1,12 @@
+VPS-LXC
+
+How to Get Started:
+
+$ git clone git://github.com/extofme/vps-lxc.git /vps
+$ /vps/struct
+$ mount -t cgroup lxc /vps/dev/vps-lxc
+$ ln -s /vps/etc/profile.d/vps-lxc.sh /etc/profile.d
+$ ln -s /vps/etc/bash_completion.d/vps-lxc /etc/bash_completion.d
+$ . /etc/profile.d/vps-lxc.sh
+$ . /etc/bash_completion.d/vps-lxc
+$ vps-lxc help
